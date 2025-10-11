@@ -10,6 +10,8 @@
 #
 
 import torch
+from scene.cameras import TempCamera
+
 
 def mse(img1, img2):
     return (((img1 - img2)) ** 2).view(img1.shape[0], -1).mean(1, keepdim=True)
@@ -30,13 +32,10 @@ from utils import graphics_utils
 import torch.nn.functional as F
 from PIL import Image
 
-from skimage.measure import shannon_entropy
-from utils import plot_utils
 
 # 设置中文显示字体
 from pylab import mpl
 mpl.rcParams["font.sans-serif"] = ["SimHei"]
-import matplotlib.pyplot as plt
 
 def read_image(image_path: str, grayscale: bool = False) -> np.ndarray:
     """读取图像，支持彩色或灰度格式"""
@@ -58,33 +57,8 @@ def resize_intrinsic(K_ori: np.ndarray, scale: float) -> np.ndarray:
     K[1, 2] *= scale  # cy
     return K.astype(np.float32)
 
-def get_intrinsic(focal_length_x, focal_length_y, height, width) -> np.ndarray:
-    K = np.array([
-        [focal_length_x, 0., intr.params[2]],
-        [0., focal_length_y, intr.params[3]],
-        [0., 0., 1.]
-    ], dtype=np.float32)
 
 
-def resize_image_with_max(image: np.ndarray, resize_max: int = None, dfactor: int = 8):
-    """调整图像尺寸，返回调整后的图像和新尺寸"""
-    size = image.shape[:2][::-1]  # (width, height)
-    scale = np.array([1.0, 1.0])
-
-    # 第一次 resize：根据 resize_max 缩放
-    if resize_max and max(size) > resize_max:
-        scale = resize_max / max(size)
-        size_new = tuple(int(round(x * scale)) for x in size)
-        image = cv2.resize(image, size_new, interpolation=cv2.INTER_AREA)
-        scale = np.array(size) / np.array(size_new)
-
-    # 第二次 resize：确保尺寸能被 dfactor 整除
-    size_new = tuple(int(x // dfactor * dfactor) for x in image.shape[:2][::-1])
-    if size_new != image.shape[:2][::-1]:
-        image = cv2.resize(image, size_new, interpolation=cv2.INTER_LINEAR)
-        scale = np.array(size) / np.array(size_new)
-
-    return image, size_new
 
 
 def resize_image_with_scale(image: np.ndarray, scale: float = None, dfactor: int = 8):
@@ -172,68 +146,6 @@ def resize_pil_to_multiple(
     # 使用LANCZOS高质量缩滤波
     return image_data.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-from skimage.filters.rank import entropy
-from skimage.morphology import disk
-from multiprocessing import Pool, cpu_count
-
-import time
-
-def compute_entropy_patch(args):
-    """计算单个图像区块的熵"""
-    patch, patch_size = args
-    ent = entropy(patch, disk(patch_size))
-    return np.mean(ent)
-
-
-def is_cluttered_entropy_parallel(image, threshold=5.5, patch_size=15, n_workers=None):
-    """
-    并行计算局部熵判断杂乱场景
-    Args:
-        image: 灰度图像 (H x W)
-        threshold: 熵阈值 (典型5.0-6.5)
-        patch_size: 计算局部熵的窗口大小
-        n_workers: 进程数（默认使用所有CPU核心）
-    Returns:
-        bool: 是否杂乱场景
-    """
-    if n_workers is None:
-        n_workers = cpu_count()  # 默认使用所有CPU核心
-
-    # 分割图像为多个区块（这里按行分割）
-    height = image.shape[0]
-    patch_height = height // n_workers
-    patches = [
-        (image[i * patch_height: (i + 1) * patch_height, :], patch_size)
-        for i in range(n_workers)
-    ]
-
-    # 使用多进程并行计算
-    with Pool(n_workers) as pool:
-        entropy_means = pool.map(compute_entropy_patch, patches)
-
-    avg_entropy = np.mean(entropy_means)
-    print('平均熵:', avg_entropy)
-    return avg_entropy > threshold
-
-def calculate_scene_entropy2(temp_cameras):
-    # 计算耗时
-    start = time.perf_counter()
-    gray_images = cv2.cvtColor(temp_cameras[0].image_data, cv2.COLOR_BGR2GRAY)
-    is_cluttered = is_cluttered_entropy_parallel(gray_images, threshold=5.5, patch_size=15)
-    end = time.perf_counter()
-    print(f"是否杂乱: {is_cluttered}")
-    print(f"耗时: {end - start:.4f} 秒")
-    return is_cluttered
-
-
-
-def calculate_scene_entropy(train_cam_infos):
-    # 方法1：基于图像纹理熵
-    gray_images = [cv2.cvtColor(plot_utils.image_pil_numpy(train_cam_info.image), cv2.COLOR_BGR2GRAY) for train_cam_info in train_cam_infos]
-    entropies = [shannon_entropy(img) for img in gray_images]
-    entropy = np.mean(entropies) / 10.0  # 假设归一化到[0,1]
-    print('entropy: ', entropy)
-    return entropy
 
 
 
@@ -254,9 +166,6 @@ def to_torch_cuda(image: np.ndarray, grayscale: bool = False, device: str = '') 
 
     return image_tensor
 
-
-
-from scene.cameras import TempCamera
 
 def resize_images(args, cam_infos):
     resized_image_dir = args.resized_image_dir

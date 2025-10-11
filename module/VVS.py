@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import torch
 
-from utils import (warp_my_utils, recover_depth_scale_utils)
+from utils import (warp_utils, recover_depth_scale_utils)
 
 def virtual_view_synthesis(gaussians, scene, sparse_args, min_loss_state, viewpoint_stack):
 
@@ -10,16 +10,16 @@ def virtual_view_synthesis(gaussians, scene, sparse_args, min_loss_state, viewpo
 
     recover_depth_scale_utils.gather_in_one(cam_dir, min_loss_state)
 
-    recover_depth_scale_utils.aligned_depth_scale2(sparse_args, viewpoint_stack, gaussians)
+    recover_depth_scale_utils.aligned_depth_scale(sparse_args, viewpoint_stack, gaussians)
 
     if sparse_args.switch_small_transform:
         recover_depth_scale_utils.aligned_depth_scale_small(sparse_args, viewpoint_stack, gaussians)
 
-    virtual_cams = warp_my_utils.generate_virtual_poses(sparse_args, viewpoint_stack)
+    virtual_cams = warp_utils.generate_virtual_poses(sparse_args, viewpoint_stack)
 
-    nearest_indices, scores = warp_my_utils.compute_important_scores(sparse_args, viewpoint_stack, virtual_cams)
+    nearest_indices, scores = warp_utils.compute_important_scores(sparse_args, viewpoint_stack, virtual_cams)
 
-    small_transform_mask = warp_my_utils.compute_small_transform_mask2(viewpoint_stack, virtual_cams)
+    small_transform_mask = warp_utils.compute_small_transform_mask(viewpoint_stack, virtual_cams)
 
     if sparse_args.switch_nearest_warping:
         print("scores前多少个：", sparse_args.nearest_warping_num)
@@ -30,9 +30,9 @@ def virtual_view_synthesis(gaussians, scene, sparse_args, min_loss_state, viewpo
     else:
         print("不开nearest_warping_num：", len(virtual_cams))
 
-    warp_my_utils.generate_virtual_cams_blend(sparse_args, viewpoint_stack, virtual_cams,
+    warp_utils.generate_virtual_cams_blend(sparse_args, viewpoint_stack, virtual_cams,
                                               nearest_indices, small_transform_mask)
 
-    virtual_cameras = warp_my_utils.set_camera(virtual_cams)
+    virtual_cameras = warp_utils.set_camera(virtual_cams)
 
     scene.setVirtualCameras(virtual_cameras)

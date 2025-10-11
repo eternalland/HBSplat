@@ -11,7 +11,6 @@
 
 import os
 
-import numpy
 import torch
 from random import randint
 
@@ -25,7 +24,8 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams, SparseParams
-from utils import (OAR, weight_increasing, loss_utils, HLDE, VVS)
+from module import (OAR, HLDE, VVS)
+from utils import loss_utils
 import cv2
 import numpy as np
 
@@ -49,9 +49,10 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
 
-
-    min_loss_state = HLDE.initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end)
     viewpoint_stack = scene.getTrainCameras().copy()
+
+
+    min_loss_state = HLDE.initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end, viewpoint_stack)
 
     if 0b010 & sparse_args.run_module:
         VVS.virtual_view_synthesis(gaussians, scene, sparse_args, min_loss_state, viewpoint_stack)
@@ -157,8 +158,9 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
             image_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
             loss += image_loss
 
-            render_match_loss = gaussians.get_matchloss_from_renderdepth(viewpoint_cam, render_pkg["rendered_depth"])
-            loss += render_match_loss * 0.3
+            if 'blender' not in sparse_args.dataset:
+                render_match_loss = gaussians.get_matchloss_from_renderdepth(viewpoint_cam, render_pkg["rendered_depth"])
+                loss += render_match_loss * 0.3
 
         else:  # unseen views
             mask = viewpoint_cam.mask.squeeze().cuda().bool()
@@ -178,7 +180,7 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
             gt_image_masked = gt_image * soft_mask
 
             unseen_v_loss = loss_utils.composite_loss(image_masked, gt_image_masked, soft_mask)
-            render_weight = weight_increasing.linear_ramp(1000, 2000, 0.8, 0.3, iteration)
+            render_weight = loss_utils.linear_ramp(1000, 2000, 0.8, 0.3, iteration)
             loss += render_weight * unseen_v_loss
             depth_map = viewpoint_cam.depth_map * soft_mask
             rendered_depth = render_pkg["rendered_depth"] * soft_mask
@@ -186,11 +188,11 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
             depth_loss = loss_utils.adaptive_depth_loss(rendered_depth, depth_map)
             loss += 0.1 * depth_loss
 
-        if 0b100 & sparse_args.run_module and (viewpoint_cam.mono_depth_map is not None):
+        if 0b100 & sparse_args.run_module and (viewpoint_cam.mono_depth_map is not None) and 'blender' not in sparse_args.dataset:
             if iteration == sparse_args.start_render_propagate_iteration:
                 print("\n开启propagate_from_renderdepth：", sparse_args.render_propagate_weight)
             if iteration >= sparse_args.start_render_propagate_iteration:
-                render_propagate_loss = gaussians.get_propagate_from_renderdepth2(viewpoint_cam, render_pkg["rendered_depth"])
+                render_propagate_loss = gaussians.get_propagate_from_renderdepth(viewpoint_cam, render_pkg["rendered_depth"])
                 loss += sparse_args.render_propagate_weight * render_propagate_loss
 
                 # TV regularization
@@ -244,7 +246,7 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.05, scene.cameras_extent, size_threshold)
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
@@ -362,15 +364,6 @@ if __name__ == "__main__":
     sp.update_from_args(args)
 
     sp.device = device
-    if format(sp.run_module, '03b') in args.model_path:
-        print(f"model_path与run_module符合，Loading model: {format(sp.run_module, '03b')},  {args.model_path}")
-    else:
-        print('sp.run_module', sp.run_module)
-        print('args.model_path', args.model_path)
-        print("输出路径model_path与测试对象run_module不符合")
-        sys.exit()
-
-
 
     print("------------Optimizing ", args.model_path)
     sp.create_dir(args.model_path)

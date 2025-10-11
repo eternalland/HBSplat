@@ -1,14 +1,14 @@
 GPU_ids=0
 
-dataset=LLFF
-scenes=(fern flower fortress horns leaves orchids room trex)
+dataset=dtu
+scenes=(scan8 scan21 scan30 scan31 scan34 scan38 scan40 scan41 scan45 scan55 scan63 scan82 scan103 scan110 scan114)
 
-data_path=./data/nerf_llff_data
-output_path=./output/ll_110
-res=8
+data_path=./data/dtu
+output_path=./output/dtu_110
+res=2
 run_module=6
 
-inv_scale=4
+inv_scale=1
 input_views=3
 switch_generate_matching_mono=0
 
@@ -25,17 +25,16 @@ touch "$log_file"
 for i in "${!scenes[@]}"
 do
     scene=${scenes[$i]}
-    neighbor_dis=${neighbor_dis_list[$i]}
-    base_thresh=${base_thresh_list[$i]}
 
 
     echo ========================= $dataset Train: $scene =========================
-    CUDA_VISIBLE_DEVICES=$GPU_ids python train.py -s $data_path/$scene -r $res -m $output_path/$scene \
-     --run_module $run_module \
-     --input_views $input_views  --neighbor_dis 5 --secondary_filtering_number 50 \
-     --tau_reproj 0.2 --base_thresh 0.17 --range_sensitivity 0.2 \
-     --eval \
-     --inv_scale $inv_scale --switch_generate_matching_mono $switch_generate_matching_mono
+
+    python train.py -s $data_path/$scene/$further -r $res -m $output_path/$scene \
+    --eval \
+    --run_module $run_module \
+    --input_views $input_views  --neighbor_dis 3 --inv_scale $inv_scale \
+    --tau_reproj 0.05 --base_thresh 0.05 --range_sensitivity 0.1 \
+    --switch_generate_matching_mono $switch_generate_matching_mono \
 
     echo ========================= $dataset Render: $scene =========================
     CUDA_VISIBLE_DEVICES=$GPU_ids python render.py -m $output_path/$scene \
@@ -47,8 +46,9 @@ do
     echo ========================= $dataset Finish: $scene =========================
 done
 
+
 echo ========================= $dataset Average =========================
 CUDA_VISIBLE_DEVICES=$GPU_ids python calculate_index.py --model_path $output_path --dataset $dataset
 
-
 echo "experiment end time: $(date)"
+

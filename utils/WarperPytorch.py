@@ -230,7 +230,7 @@ class Warper:
 
 
 
-    def backward_warp6(self, img1: torch.Tensor, depth_map1: torch.Tensor,
+    def bidirectional_warp(self, img1: torch.Tensor, depth_map1: torch.Tensor,
                       w2c1: torch.Tensor, w2c2: torch.Tensor,
                       K1: torch.Tensor, K2: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """

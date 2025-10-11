@@ -2,11 +2,10 @@ import os
 import torch
 import cv2
 import warnings
-
 import numpy as np
 import sys
 
-import config
+import data_preprocess.config as config
 
 sys.path.insert(0, config.get_gim_path())
 from networks.lightglue.superpoint import SuperPoint
@@ -17,10 +16,10 @@ from networks.loftr.config import get_cfg_defaults
 from networks.dkm.models.model_zoo.DKMv3 import DKMv3
 from networks.roma.roma import RoMa
 
-sys.path.insert(1, config.get_aspan_path())
-from src.ASpanFormer.aspanformer import ASpanFormer
-from src.config.default import get_cfg_defaults as get_cfg_defaults_asp
-from src.utils.misc import lower_config as lower_config_asp
+# sys.path.insert(1, config.get_aspan_path())
+# from src.ASpanFormer.aspanformer import ASpanFormer
+# from src.config.default import get_cfg_defaults as get_cfg_defaults_asp
+# from src.utils.misc import lower_config as lower_config_asp
 
 
 global detector
@@ -78,18 +77,18 @@ def loftr_model(args):
     model = model.eval().to(args.device)
 
 
-def aspan_model(args):
-    global model
-
-    config = get_cfg_defaults_asp()
-    config.merge_from_file('/home/mayu/thesis/ml-aspanformer/configs/aspan/indoor/aspan_test.py')
-    _config = lower_config_asp(config)
-    model = ASpanFormer(config=_config['aspan'])
-
-    checkpoints_path = config.get_aspan_weights_path()
-    state_dict = torch.load(checkpoints_path, map_location='cpu')['state_dict']
-    model.load_state_dict(state_dict, strict=False)
-    model.eval().to(args.device)
+# def aspan_model(args):
+#     global model
+#
+#     config = get_cfg_defaults_asp()
+#     config.merge_from_file('/home/mayu/thesis/ml-aspanformer/configs/aspan/indoor/aspan_test.py')
+#     _config = lower_config_asp(config)
+#     model = ASpanFormer(config=_config['aspan'])
+#
+#     checkpoints_path = config.get_aspan_weights_path()
+#     state_dict = torch.load(checkpoints_path, map_location='cpu')['state_dict']
+#     model.load_state_dict(state_dict, strict=False)
+#     model.eval().to(args.device)
 
 
 def dkm_model(args):
@@ -278,8 +277,8 @@ def read_model(args):
         lightglue_model(args)
     elif args.matching_method == 'loftr':
         loftr_model(args)
-    elif args.matching_method == 'aspan':
-        aspan_model(args)
+    # elif args.matching_method == 'aspan':
+    #     aspan_model(args)
     elif args.matching_method == 'dkm':
         dkm_model(args)
     elif args.matching_method == 'roma':
@@ -292,8 +291,8 @@ def match_op(args, data, image0, image1):
         return lightglue_matching(data, image0, image1)
     elif args.matching_method == 'loftr':
         return loftr_matching(data, image0, image1)
-    elif args.matching_method == 'aspan':
-        return aspan_matching(data, image0, image1)
+    # elif args.matching_method == 'aspan':
+    #     return aspan_matching(data, image0, image1)
     elif args.matching_method == 'dkm':
         return dkm_matching(data, image0, image1, args.top_k)
     elif args.matching_method == 'roma':

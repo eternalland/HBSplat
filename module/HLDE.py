@@ -1,7 +1,8 @@
 from tqdm import tqdm
 import torch
+from utils import filter_outlier
 
-def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end):
+def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end, viewpoint_stack):
 
     # init stage
     if 0b100 & sparse_args.run_module:
@@ -58,8 +59,8 @@ def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end):
             if iteration % 10 == 0:
                 progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
                 progress_bar.update(10)
-            if iteration >= 1999:
-                progress_bar.close()
+            # if iteration >= 1999:
+            #     progress_bar.close()
 
             if 0b100 & sparse_args.run_module:
                 if iteration % 10 == 0:
@@ -79,25 +80,35 @@ def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end):
         if 0b100 & sparse_args.run_module:
 
             if iteration == sparse_args.filter_iteration - 1:  # 因为迭代从0开始
-                progress_bar.close()
-                print(f"\nPerforming filtering at iteration {sparse_args.filter_iteration}")
 
-                gaussians.filter_outliers3(sparse_args, min_loss_state)
-                if sparse_args.switch_second_filter:
-                    gaussians.second_filter2()
+                if 'blender' in sparse_args.dataset:
+                    filter_outlier.filter_propagate_data_common(gaussians, min_loss_state, sparse_args)
+                    if sparse_args.switch_second_filter:
+                        filter_outlier.second_filter(gaussians, sparse_args)
+                else:
+                    progress_bar.close()
+                    print(f"\nPerforming filtering at iteration {sparse_args.filter_iteration}")
 
-                gaussians.training_setup_init()
+                    filter_outlier.filter_outliers(gaussians, sparse_args, min_loss_state)
+                    if sparse_args.switch_second_filter:
+                        filter_outlier.second_filter(gaussians, sparse_args)
 
-                # 重置状态（可选）
-                ema_loss_for_log = 0.0
-                best_state_dict = None
-                min_loss_state = None
+                    gaussians.training_setup_init()
 
-                # 创建新的进度条
-                progress_bar = tqdm(range(sparse_args.filter_iteration, sparse_args.num_iterations),
-                                    desc="Post-filter training",
-                                    initial=sparse_args.filter_iteration)
+                    # 重置状态（可选）
+                    ema_loss_for_log = 0.0
+                    best_state_dict = None
+                    min_loss_state = None
+
+                    # 创建新的进度条
+                    progress_bar = tqdm(range(sparse_args.filter_iteration, sparse_args.num_iterations),
+                                        desc="Post-filter training",
+                                        initial=sparse_args.filter_iteration)
+
 
     gaussians.load_z_val(best_state_dict)
+
+    if 'blender' in sparse_args.dataset:
+        filter_outlier.filter_outside(gaussians, viewpoint_stack, min_loss_state, sparse_args)
 
     return min_loss_state

@@ -2,12 +2,9 @@ import torch
 import os
 import numpy as np
 from typing import NamedTuple, List
-from utils import pose_utils2, plot_utils, middle_pose_utils, graphics_utils
+from utils import pose_utils, plot_utils, middle_pose_utils, graphics_utils, multi_view_fusion_utils
 from utils.WarperPytorch import Warper
-import cv2
 from scene.cameras import Camera, TempCamera, save_pose
-
-import torch.nn.functional as F
 
 
 def generate_virtual_poses(args, viewpoint_stack) -> List['TempCamera']:
@@ -28,9 +25,9 @@ def generate_virtual_poses(args, viewpoint_stack) -> List['TempCamera']:
     if v_num > 0:
         target_c2ws = np.empty((0, 4, 4))
         if args.scene_type == 'fore':
-            target_c2ws = pose_utils2.generate_pseudo_poses_llff(all_input_extrs, bounds, n_poses=v_num)
+            target_c2ws = pose_utils.generate_pseudo_poses_llff(all_input_extrs, bounds, n_poses=v_num)
         if args.scene_type == '360':
-            target_c2ws = pose_utils2.generate_ellipse_path_from_camera_infos(all_input_extrs, n_frames=v_num)
+            target_c2ws = pose_utils.generate_ellipse_path_from_camera_infos(all_input_extrs, n_frames=v_num)
         # 转换为外参矩阵
         target_w2cs = np.stack([np.linalg.inv(pose) for pose in target_c2ws])
 
@@ -154,8 +151,8 @@ def generate_virtual_cams_blend(args, source_cams, target_cams, nearest_indices,
             intrinsic2=torch_target_K  # (b, 3, 3)
         )
     else:
-        print("warper.backward_warping")
-        warped_images, warped_depths, valid_masks = warper.backward_warp6(
+        print("warper.bidirectional_warp")
+        warped_images, warped_depths, valid_masks = warper.bidirectional_warp(
             img1=torch_source_image_data,  # (b, 3, h, w)
             depth_map1=torch_source_depth_map,  # (b, 1, h, w)
             w2c1=torch_source_w2cs,  # (b, 4, 4)
@@ -172,17 +169,16 @@ def generate_virtual_cams_blend(args, source_cams, target_cams, nearest_indices,
     os.makedirs(fused_depths_dir := os.path.join(args.virtual_camera_dir, "fused_depths"), exist_ok=True)
     os.makedirs(fused_masks_dir := os.path.join(args.virtual_camera_dir, "fused_masks"), exist_ok=True)
 
-    fused_warped_images = batch_mask_fusion(warped_images, k)
-    fused_depth_maps = batch_mask_fusion(warped_depths, k)
-    fused_valid_masks = batch_mask_fusion(valid_masks, k)
-
+    fused_warped_images, fused_depth_maps, fused_valid_masks = multi_view_fusion_utils.multi_view_fusion(args, warped_images, warped_depths, valid_masks, k)
 
     for index in range(len(target_cams)):
         warped_image_name = str(index) + "_image.jpg"
         save_path = str(os.path.join(fused_warped_dir, warped_image_name))
-        plot_utils.save_image(fused_warped_images[index], save_path)
-        plot_utils.save_depth_map(fused_depth_maps[index], os.path.join(fused_depths_dir, f"{index}_depth.jpg"))
-        plot_utils.save_image(fused_valid_masks[index], os.path.join(fused_masks_dir, f"{index}_mask.jpg"))
+
+        if args.switch_intermediate_result:
+            plot_utils.save_image(fused_warped_images[index], save_path)
+            plot_utils.save_depth_map(fused_depth_maps[index], os.path.join(fused_depths_dir, f"{index}_depth.jpg"))
+            plot_utils.save_image(fused_valid_masks[index], os.path.join(fused_masks_dir, f"{index}_mask.jpg"))
 
         target_cams[index].image_data=fused_warped_images[index]
         target_cams[index].image_name=warped_image_name
@@ -190,67 +186,18 @@ def generate_virtual_cams_blend(args, source_cams, target_cams, nearest_indices,
         target_cams[index].warped_depth = fused_depth_maps[index]
         target_cams[index].mask = fused_valid_masks[index]
 
-    for index in range(len(warped_images)):
-        # 保存结果
-        plot_utils.save_image(warped_images[index], os.path.join(warped_dir, f"{index}_image.jpg"))
-        plot_utils.save_depth_map(warped_depths[index], os.path.join(depths_dir, f"{index}_depth.jpg"))
-        depth_map = vis_depth(warped_depths[index].detach().squeeze(0).cpu().numpy())
-        cv2.imwrite(os.path.join(depths_dir, f"{index}_vis.jpg"), depth_map)
-        plot_utils.save_image(valid_masks[index], os.path.join(masks_dir, f"{index}_mask.jpg"))
-        np.save(os.path.join(depths_dir, f"{index}_np.npy"), np.array(warped_depths[index].cpu().numpy()))
+    if args.switch_intermediate_result:
+        for index in range(len(warped_images)):
+            # 保存结果
+            plot_utils.save_image(warped_images[index], os.path.join(warped_dir, f"{index}_image.jpg"))
+            plot_utils.save_depth_map(warped_depths[index], os.path.join(depths_dir, f"{index}_depth.jpg"))
+            # depth_map = vis_depth(warped_depths[index].detach().squeeze(0).cpu().numpy())
+            # cv2.imwrite(os.path.join(depths_dir, f"{index}_vis.jpg"), depth_map)
+            plot_utils.save_image(valid_masks[index], os.path.join(masks_dir, f"{index}_mask.jpg"))
+            np.save(os.path.join(depths_dir, f"{index}_np.npy"), np.array(warped_depths[index].cpu().numpy()))
 
 
-
-def batch_mask_fusion(warped_images, k):
-    """
-    批量图像融合函数
-
-    参数:
-        warped_images (torch.Tensor): 输入图像张量，形状为(b, c, h, w)
-        k (int): 每组图像数量
-
-    返回:
-        torch.Tensor: 融合后的图像张量，形状为(n, c, h, w), 其中n = b // k
-    """
-    b, c, h, w = warped_images.shape
-    n = b // k
-    fused_images = torch.zeros((n, c, h, w), device=warped_images.device)
-
-    for i in range(n):
-        # 获取当前组的k个图像
-        group = warped_images[i * k: (i + 1) * k]
-
-        # 第一张图像作为基础
-        base_img = group[0]
-
-        # 初始化融合结果为第一张图像
-        fused = base_img.clone()
-
-        # 对组内其他图像进行处理
-        for j in range(1, k):
-            current_img = group[j]
-
-            # 计算差异掩模 (绝对值差异大于阈值)
-            diff = torch.abs(base_img - current_img)
-            gray_diff = diff.mean(dim=0, keepdim=True)  # 转换为灰度差异
-            mask = (gray_diff > 0.1).float()  # 阈值设为0.1，可根据需要调整
-
-            # 对掩模进行膨胀操作 (使边缘更平滑)
-            kernel = torch.ones(1, 1, 5, 5, device=warped_images.device)
-            mask = F.conv2d(mask.unsqueeze(0), kernel, padding=2).squeeze(0)
-            mask = (mask > 0).float()
-
-            # 将当前图像中差异大的区域融合到基础图像
-            fused = fused * (1 - mask) + current_img * mask
-
-        fused_images[i] = fused
-
-    return fused_images
-
-
-
-
-def compute_small_transform_mask2(input_cams, virtual_cams,
+def compute_small_transform_mask(input_cams, virtual_cams,
                                  rotation_factor=1, translation_factor=1):
 
     # 提取输入和虚拟相机的R和T（确保是PyTorch张量）

@@ -75,23 +75,9 @@ def infer_depth(model, image: torch.Tensor, f_px: float) -> torch.Tensor:
     return prediction["depth"]
 
 
-
-
-
-def generate_mono_depths3(args, train_cam_infos):
+def generate_mono_depths(cam_infos, args):
     print(f"run mono_depth")
 
-    process_images3(train_cam_infos, args)
-
-
-def process_images3(cam_infos, args) -> None:
-    """
-    批量处理文件夹中的图像，生成并保存深度图。
-
-    Args:
-        input_dir (list): 输入图像。
-        output_dir (str): 输出深度图文件夹。
-    """
     output_dir = args.mono_depth_map_dir
     device = args.device
 
@@ -109,6 +95,7 @@ def process_images3(cam_infos, args) -> None:
         mono_depth_map = Image.fromarray(depth_normalized)
         cam_infos[idx] = cam_info._replace(mono_depth_map=mono_depth_map)
         print(f"深度图已保存到: {save_path}")
+
 
 
 def get_mono_depth(imgs):
@@ -138,7 +125,7 @@ def get_mono_depth(imgs):
     return prediction.cpu().numpy()
 
 
-def load_depth_maps2(cam_infos, depth_image_dir: str) -> dict:
+def load_depth_maps(cam_infos, depth_image_dir: str):
     image_name_dic = {cam_info.image_name: cam_info for cam_info in cam_infos}
     image_names = list(image_name_dic.keys())
 

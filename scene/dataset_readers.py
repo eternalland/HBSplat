@@ -24,8 +24,8 @@ from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from utils.graphics_utils import BasicPointCloud
 import cv2
-from utils.virtual_poses import interpolate_virtual_poses_sequential
-from utils import (pose_utils, get_match_info, image_utils, get_mono_depth, propagate_matches)
+from utils import (image_utils, propagate_matches, filter_outlier)
+from data_preprocess import (get_match_info, get_mono_depth)
 import torch
 
 class CameraInfo(NamedTuple):
@@ -198,9 +198,9 @@ def readColmapSceneInfo(path, images, eval, sparse_args, llffhold=8):
     matched_datas = {}
     common_matched_data = {}
     if sparse_args.is_training:
-        matched_datas, common_matched_data = get_match_mono_data(train_cam_infos, sparse_args)
         sparse_args.scene_type = 'fore'
         sparse_args.dataset = 'llff'
+        matched_datas, common_matched_data = get_match_mono_data(train_cam_infos, sparse_args)
         torch.cuda.empty_cache()
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
@@ -286,7 +286,7 @@ def readTanksSceneInfo(path, images, eval, sparse_args, llffhold=8):
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
         test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
         
-        N_sparse = 12
+        N_sparse = 24
         idx_train = np.linspace(0, len(train_cam_infos) - 1, N_sparse)
         idx_train = [round(i) for i in idx_train]
         other_cam_infos = [c for idx, c in enumerate(train_cam_infos) if idx not in idx_train]
@@ -297,74 +297,14 @@ def readTanksSceneInfo(path, images, eval, sparse_args, llffhold=8):
         train_cam_infos = cam_infos
         test_cam_infos = []
 
+    matched_datas = {}
     common_matched_data = {}
-    common_matched_data_render = {}
-    is_cluttered = False
     if sparse_args.is_training:
-        temp_cameras = image_utils.resize_images(sparse_args, train_cam_infos)
-        is_cluttered = image_utils.calculate_scene_entropy2(temp_cameras)
-
-        if sparse_args.switch_fast_other_mono_match:
-            get_mono_depth.load_depth_maps2(train_cam_infos, sparse_args.fast_other_mono)
-            print("switch_fast_other_mono, 使用：\n", sparse_args.fast_other_mono)
-        else:
-            get_mono_depth.generate_mono_depths3(sparse_args, train_cam_infos)
-            print("no-----switch_fast_other_mono")
-
+        sparse_args.scene_type = '360'
+        sparse_args.dataset = 'tt'
+        dic, _, _, _ = compute_camera_neighbors(train_cam_infos)
+        matched_datas, common_matched_data = get_match_mono_data(train_cam_infos, sparse_args, dic)
         torch.cuda.empty_cache()
-
-        if 0b100 & sparse_args.run_module: # 100
-            print('match-----', sparse_args.run_module)
-            print('ransac-----', sparse_args.run_module)
-
-            if sparse_args.switch_fast_other_mono_match:
-                if '000' in sparse_args.fast_other_match:
-                    print('使用000-dkm, ransac')
-                elif '100' in sparse_args.fast_other_match:
-                    print('使用100-roma, no-ransac')
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                matched_datas = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                matched_datas = get_match_info.generate_matched_datas(sparse_args, temp_cameras)
-                get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, sparse_args.matching_method)
-
-            # MDC
-            common_matched_data = propagate_matches.common_matched_data_mnn(temp_cameras, matched_datas, sparse_args.neighbor_dis)
-        else: # 010, 001
-            print('match-----ori')
-            sparse_args.matching_method = 'dkm'
-            if sparse_args.switch_fast_other_mono_match:
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                print('ransac-----no')
-                matched_datas = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                print('ransac-----', sparse_args.run_module)
-                matched_datas = get_match_info.generate_matched_datas(sparse_args, temp_cameras)
-                get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, sparse_args.matching_method)
-                get_match_info.ransac(sparse_args, temp_cameras, matched_datas)
-                get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, 'ransac')
-
-        all_match_data = matched_datas
-        torch.cuda.empty_cache()
-
-    else: # render
-        if 0b100 & sparse_args.run_module:
-            if sparse_args.switch_fast_other_mono_match:
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                all_match_data = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                all_match_data = np.load(os.path.join(sparse_args.matched_image_dir, "matched_data.npy"), allow_pickle=True).item()
-        else:
-            if sparse_args.switch_fast_other_mono_match:
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                all_match_data = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                all_match_data = np.load(os.path.join(sparse_args.matched_image_dir, "matched_data.npy"), allow_pickle=True).item()
-    # sys.exit()
 
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
@@ -415,36 +355,16 @@ def readTanksSceneInfo(path, images, eval, sparse_args, llffhold=8):
         
         near_fars.append([np.min(colmap_depth), np.max(colmap_depth)])
         train_cam_infos[idx] = caminfo._replace(near_far=np.array([np.min(colmap_depth) * 0.8, np.max(colmap_depth) * 1.2]))
-    
-    # get match data
-    # all_match_data = np.load(os.path.join(path, "match_data.npy"), allow_pickle=True).item()
-    match_data = {}
-    for i in range(len(train_cam_infos)-1):
-        cam0 = train_cam_infos[i]
-        name0 = cam0.image_name
-        if name0 not in match_data:
-            match_data[name0] = {}
-        for j in range(i+1, len(train_cam_infos)):
-            cam1 = train_cam_infos[j]
-            name1 = cam1.image_name
-            if name1 not in match_data:
-                match_data[name1] = {}
-            
-            match_data[name0][name1] = all_match_data[name0][name1]['points']
-            match_data[name1][name0] = all_match_data[name1][name0]['points']
+
 
     scene_info = SceneInfo(point_cloud=pcd,
-                           match_data=match_data,
-                           all_match_data=all_match_data,
+                           match_data=matched_datas,
                            common_matched_data=common_matched_data,
-                           common_matched_data_render=common_matched_data_render,
-                           is_cluttered=is_cluttered,
                            base_cameras = base_cam_infos,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
-    sparse_args.scene_type = '360'
     return scene_info
 
 
@@ -556,77 +476,13 @@ def readDTUSceneInfo(path, images, eval, sparse_args, llffhold=8):
         test_cam_infos = []
 
 
+    matched_datas = {}
     common_matched_data = {}
-    common_matched_data_render = {}
-    # is_cluttered = True
-    is_cluttered = False
     if sparse_args.is_training:
-        temp_cameras = image_utils.resize_images(sparse_args, train_cam_infos)
-        is_cluttered = image_utils.calculate_scene_entropy2(temp_cameras)
-        # is_cluttered = image_utils.calculate_scene_entropy(train_cam_infos)
-
-        if sparse_args.switch_fast_other_mono_match:
-            get_mono_depth.load_depth_maps2(train_cam_infos, sparse_args.fast_other_mono)
-            print("switch_fast_other_mono, 使用：\n", sparse_args.fast_other_mono)
-        else:
-            get_mono_depth.generate_mono_depths3(sparse_args, train_cam_infos)
-            print("no-----switch_fast_other_mono")
-
+        sparse_args.scene_type = 'fore'
+        sparse_args.dataset = 'dtu'
+        matched_datas, common_matched_data = get_match_mono_data(train_cam_infos, sparse_args)
         torch.cuda.empty_cache()
-
-        if 0b100 & sparse_args.run_module: # 100
-            print('match-----', sparse_args.run_module)
-            print('ransac-----', sparse_args.run_module)
-
-            if sparse_args.switch_fast_other_mono_match:
-                if '000' in sparse_args.fast_other_match:
-                    print('使用000-dkm, ransac')
-                elif '100' in sparse_args.fast_other_match:
-                    print('使用100-roma, no-ransac')
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                matched_datas = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                matched_datas = get_match_info.generate_matched_datas(sparse_args, temp_cameras)
-                get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, sparse_args.matching_method)
-
-            # MDC
-            common_matched_data = propagate_matches.common_matched_data_mnn(temp_cameras, matched_datas, sparse_args.neighbor_dis)
-        else: # 000, 010, 001
-            print('match-----ori')
-            sparse_args.matching_method = 'dkm'
-            if sparse_args.switch_fast_other_mono_match:
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                print('ransac-----no')
-                matched_datas = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                print('ransac-----', sparse_args.run_module)
-                matched_datas = get_match_info.generate_matched_datas(sparse_args, temp_cameras)
-                get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, sparse_args.matching_method)
-                get_match_info.ransac(sparse_args, temp_cameras, matched_datas)
-                get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, 'ransac')
-
-        all_match_data = matched_datas
-        torch.cuda.empty_cache()
-
-    else: # render
-        if 0b100 & sparse_args.run_module:
-            if sparse_args.switch_fast_other_mono_match:
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                all_match_data = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                all_match_data = np.load(os.path.join(sparse_args.matched_image_dir, "matched_data.npy"), allow_pickle=True).item()
-        else:
-            if sparse_args.switch_fast_other_mono_match:
-                print("switch_fast_other_match, 使用：\n", sparse_args.fast_other_match)
-                all_match_data = np.load(os.path.join(sparse_args.fast_other_match), allow_pickle=True).item()
-            else:
-                print("no-----switch_fast_other_match")
-                all_match_data = np.load(os.path.join(sparse_args.matched_image_dir, "matched_data.npy"), allow_pickle=True).item()
-    # sys.exit()
-
 
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
@@ -677,37 +533,16 @@ def readDTUSceneInfo(path, images, eval, sparse_args, llffhold=8):
         
         near_fars.append([np.min(colmap_depth), np.max(colmap_depth)])
         train_cam_infos[idx] = caminfo._replace(near_far=np.array([np.min(colmap_depth) * 0.8, np.max(colmap_depth) * 1.2]))
-    
-    # get match data
-    # all_match_data = np.load(os.path.join(path, "match_data.npy"), allow_pickle=True).item()
-    match_data = {}
-    for i in range(len(train_cam_infos)-1):
-        cam0 = train_cam_infos[i]
-        name0 = cam0.image_name
-        if name0 not in match_data:
-            match_data[name0] = {}
-        for j in range(i+1, len(train_cam_infos)):
-            cam1 = train_cam_infos[j]
-            name1 = cam1.image_name
-            if name1 not in match_data:
-                match_data[name1] = {}
-            
-            match_data[name0][name1] = all_match_data[name0][name1]['points']
-            match_data[name1][name0] = all_match_data[name1][name0]['points']
+
 
     scene_info = SceneInfo(point_cloud=pcd,
-                           match_data=match_data,
+                           match_data=matched_datas,
                            base_cameras = base_cam_infos,
-                           all_match_data=all_match_data,
                            common_matched_data=common_matched_data,
-                           common_matched_data_render=common_matched_data_render,
-                           is_cluttered=is_cluttered,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
-    sparse_args.scene_type = 'fore'
-    sparse_args.dataset = 'dtu'
     return scene_info
 
 def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
@@ -783,11 +618,13 @@ def readNerfSyntheticInfo(path, white_background, eval, sparse_args, extension="
         train_cam_infos.extend(test_cam_infos)
         test_cam_infos = []
 
-
-    matched_datas, common_matched_data = get_match_mono_data(train_cam_infos, sparse_args)
-    sparse_args.scene_type = '360'
-    sparse_args.dataset = 'blender'
-    torch.cuda.empty_cache()
+    matched_datas = {}
+    common_matched_data = {}
+    if sparse_args.is_training:
+        sparse_args.scene_type = '360'
+        sparse_args.dataset = 'blender'
+        matched_datas, common_matched_data = get_match_mono_data(train_cam_infos, sparse_args)
+        torch.cuda.empty_cache()
 
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
@@ -820,190 +657,8 @@ def readNerfSyntheticInfo(path, white_background, eval, sparse_args, extension="
     return scene_info
 
 
-def generateLLFFCameras(poses):
-    cam_infos = []
-    Rs, tvecs, height, width, focal_length_x = pose_utils.convert_poses(poses) 
-    # print(Rs, tvecs, height, width, focal_length_x)
-    virtual_poses = []
-    for idx, _ in enumerate(Rs):
-        sys.stdout.write('\r')
-        # the exact output you're looking for:
-        sys.stdout.write("Reading camera {}/{}".format(idx+1, len(Rs)))
-        sys.stdout.flush()
 
-        uid = idx
-        R = np.transpose(Rs[idx])
-        T = tvecs[idx]
-
-        FovY = focal2fov(focal_length_x, height)
-        FovX = focal2fov(focal_length_x, width)
-        
-        virtual_pose = {
-            "R": R,
-            "T": T,
-            "FovY": FovY,
-            "FovX": FovX,
-            "uid": uid
-        }
-        virtual_poses.append(virtual_pose)
-        
-        # image = Image.fromarray((np.ones((height, width, 3), dtype=np.int32)*255).astype(np.byte), "RGB")
-
-        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=None, dtumask=None, blendermask=None, point3D_ids=None, near_far=None,
-                              image_path=None, image_name=None, width=width, height=height)
-        cam_infos.append(cam_info)
-        
-    np.save("virtual_poses.npy", virtual_poses)
-    sys.stdout.write('\n')
-    return cam_infos
-
-
-def CreateLLFFSpiral(basedir):
-
-    # Load poses and bounds.
-    poses_arr = np.load(os.path.join(basedir, 'poses_bounds.npy'))
-    poses_o = poses_arr[:, :-2].reshape([-1, 3, 5])
-    bounds = poses_arr[:, -2:]
-    
-    # Pull out focal length before processing poses.
-    # Correct rotation matrix ordering (and drop 5th column of poses).
-    fix_rotation = np.array([
-        [0, -1, 0, 0],
-        [1, 0, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1],
-    ],
-                            dtype=np.float32)
-    inv_rotation = np.linalg.inv(fix_rotation)
-    poses = poses_o[:, :3, :4] @ fix_rotation
-
-    # Rescale according to a default bd factor.
-    # scale = 1. / (bounds.min() * .75)
-    # poses[:, :3, 3] *= scale
-    # bounds *= scale
-
-    # Recenter poses.
-    render_poses = pose_utils.recenter_poses(poses)
-
-    # Separate out 360 versus forward facing scenes.
-    render_poses = pose_utils.generate_spiral_path(
-          render_poses, bounds, n_frames=180)
-    render_poses = pose_utils.backcenter_poses(render_poses, poses)
-    render_poses = render_poses @ inv_rotation
-    render_poses = np.concatenate([render_poses, np.tile(poses_o[:1, :3, 4:], (render_poses.shape[0], 1, 1))], -1)
-
-    render_cam_infos = generateLLFFCameras(render_poses.transpose([1,2,0]))
-
-    nerf_normalization = getNerfppNorm(render_cam_infos)
-
-    scene_info = SceneInfo(point_cloud=None,
-                           train_cameras=None,
-                           base_cameras=None,
-                           match_data=None,
-                           test_cameras=render_cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=None)
-    return scene_info
-
-
-def CreateTanksSpiral(path):
-    try:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
-        cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
-    except:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
-        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
-
-    reading_dir = "images"
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
-    cam_infos_as = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
-    cam_infos_ds = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name, reverse=True)
-    cam_infos = cam_infos_as + cam_infos_ds
-
-    nerf_normalization = getNerfppNorm(cam_infos)
-
-    
-    scene_info = SceneInfo(point_cloud=None,
-                           match_data=None,
-                           base_cameras = None,
-                           train_cameras=None,
-                           test_cameras=cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=None)
-    return scene_info
-
-
-def generateTanksCameras(poses, width, height, FovX, FovY):
-    w2cs = np.linalg.inv(poses)
-    cam_infos = []
-    for idx, w2c in enumerate(w2cs):
-        R = w2c[:3, :3].transpose()
-        T = w2c[:3, 3]
-        
-        cam_info = CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=None, dtumask=None, blendermask=None, point3D_ids=None, near_far=None,
-                              image_path=None, image_name=None, width=width, height=height)
-        cam_infos.append(cam_info)
-    
-    return cam_infos
-
-
-def CreateTanksSpiral2(path):
-    try:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
-        cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
-    except:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
-        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
-
-    reading_dir = "images"
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
-    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
-    
-    train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % 8 != 0]
-    test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % 8 == 0]
-    
-    N_sparse = 3
-    idx_train = np.linspace(0, len(train_cam_infos) - 1, N_sparse)
-    idx_train = [round(i) for i in idx_train]
-    train_cam_infos = [c for idx, c in enumerate(train_cam_infos) if idx in idx_train]
-    
-    train_poses = []
-    for cam in train_cam_infos:
-        w2c_init = np.zeros((4, 4))
-        w2c_init[:3, :3] = cam.R.transpose()
-        w2c_init[:3, 3] = cam.T
-        w2c_init[3, 3] = 1.0
-        train_poses.append(w2c_init)
-    train_poses = np.linalg.inv(np.stack(train_poses, axis=0))
-    
-    virtual_poses = interpolate_virtual_poses_sequential(train_poses, 30)
-    virtual_poses = np.concatenate([virtual_poses, virtual_poses[::-1]], axis=0)
-    
-    render_cam_infos = generateTanksCameras(virtual_poses, train_cam_infos[0].width, train_cam_infos[0].height, train_cam_infos[0].FovX, train_cam_infos[0].FovY)
-
-    nerf_normalization = getNerfppNorm(render_cam_infos)
-
-    
-    scene_info = SceneInfo(point_cloud=None,
-                           match_data=None,
-                           base_cameras = None,
-                           train_cameras=None,
-                           test_cameras=render_cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=None)
-    return scene_info
-
-
-
-def get_match_mono_data(train_cam_infos, sparse_args):
+def get_match_mono_data(train_cam_infos, sparse_args, dic=None):
 
     if sparse_args.switch_generate_matching_mono:
         temp_cameras = image_utils.resize_images(sparse_args, train_cam_infos)
@@ -1011,17 +666,20 @@ def get_match_mono_data(train_cam_infos, sparse_args):
         get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, sparse_args.matching_method)
         get_match_info.ransac(sparse_args, temp_cameras, matched_datas)
         get_match_info.draw_matched_point(sparse_args, temp_cameras, matched_datas, 'ransac')
-        get_mono_depth.generate_mono_depths3(sparse_args, train_cam_infos)
+        get_mono_depth.generate_mono_depths(sparse_args, train_cam_infos)
         sys.exit()
 
     common_matched_data = {}
     if 0b100 & sparse_args.run_module: # 100 # HLDE
         matched_datas = np.load(os.path.join(sparse_args.matched_image_dir, 'matched_data.npy'), allow_pickle=True).item()
-        common_matched_data = propagate_matches.common_matched_data_mnn(train_cam_infos, matched_datas, sparse_args.neighbor_dis)
+        if 'blender' in sparse_args.dataset or 'nerf_synthetic' in sparse_args.dataset:
+            filter_outlier.blender_filter(train_cam_infos, matched_datas, sparse_args)
+            filter_outlier.generate_ray_point_cloud_filtering(train_cam_infos, matched_datas, sparse_args)
+        common_matched_data = propagate_matches.common_matched_data_mnn(train_cam_infos, matched_datas, dic, sparse_args.neighbor_dis)
     else: # 010, 001
         matched_datas = np.load(os.path.join(sparse_args.fast_other_match, 'matched_data_ransac.npy'), allow_pickle=True).item()
 
-    get_mono_depth.load_depth_maps2(train_cam_infos, sparse_args.mono_depth_map_dir)
+    get_mono_depth.load_depth_maps(train_cam_infos, sparse_args.mono_depth_map_dir)
 
     for i, cam_info0 in enumerate(train_cam_infos[:-1]):
         name0 = cam_info0.image_name
@@ -1034,12 +692,45 @@ def get_match_mono_data(train_cam_infos, sparse_args):
     return matched_datas, common_matched_data
 
 
+def compute_camera_neighbors(input_cams, pos_weight=0.5, rot_weight=0.5, top_k=5):
+    """
+    综合位置和旋转信息的相机相邻性计算
+    """
+    positions = np.stack([cam.T for cam in input_cams])  # (N, 3)
+    rotations = np.stack([cam.R.T for cam in input_cams])  # (N, 3, 3)
+
+    # 1. 位置距离评分
+    pos_dist = np.sqrt(np.sum((positions[:, np.newaxis] - positions) ** 2, axis=2))
+    pos_scores = np.exp(-pos_dist / np.mean(pos_dist))
+
+    # 2. 旋转相似性评分
+    # 计算旋转矩阵的点积: R_i @ R_j^T
+    rot_similarity = np.einsum('nik,mjk->nmij', rotations, rotations)  # (N, N, 3, 3)
+    traces = np.diagonal(rot_similarity, axis1=2, axis2=3).sum(axis=2)  # (N, N)
+    angle_diff = np.arccos(np.clip((traces - 1) / 2, -1, 1))
+    rot_scores = np.exp(-angle_diff / np.mean(angle_diff))
+
+    # 3. 综合评分
+    combined_scores = pos_weight * pos_scores + rot_weight * rot_scores
+
+    # 4. 获取相邻相机（排除自身）
+    np.fill_diagonal(combined_scores, -np.inf)  # 将自身设为负无穷，避免选择自己
+    neighbor_indices = np.argsort(-combined_scores, axis=1)[:, :top_k]
+    neighbor_scores = np.take_along_axis(combined_scores, neighbor_indices, axis=1)
+
+    dic = {}
+    for i, me in enumerate(neighbor_indices):
+        li = []
+        for nei in me:
+            li.append(input_cams[nei].image_name)
+        dic[input_cams[i].image_name] = li
+
+    return dic, neighbor_indices, neighbor_scores, combined_scores
+
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender": readNerfSyntheticInfo,
     "DTU": readDTUSceneInfo,
     "Tanks": readTanksSceneInfo,
-    "LLFFVideo": CreateLLFFSpiral,
-    "TanksVideo": CreateTanksSpiral2,
 }

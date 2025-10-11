@@ -128,19 +128,5 @@ if __name__ == "__main__":
     parser.add_argument('--model_path', '-m', required=True, nargs="+", type=str, default=[])
     args = parser.parse_args()
 
-    # dir_dict = {dir.split('_')[1]:dir for dir in os.listdir(sp.output_dir)}
-    # max_item = max(dir_dict.items(), key=lambda x: x[0])
-
-    if len(args.model_path) == 0:
-        sub_dirs = [d for d in os.listdir(sp.output_dir)
-                   if os.path.isdir(os.path.join(sp.output_dir, d))]
-
-        if sub_dirs:  # 确保存在符合条件的目录
-            max_dir = max(sub_dirs, key=lambda x: int(x.split('_')[1]))
-            args.model_path = [os.path.join(sp.output_dir, max_dir)]
-        else:
-            raise ValueError(f"No valid subdirectories found in {sp.output_dir}")
-
-    # print("Optimizing " + args.model_paths + '\n')
 
     evaluate(args.model_path)

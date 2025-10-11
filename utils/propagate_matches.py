@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-import cv2
 
 
 from scipy.spatial import cKDTree
@@ -83,7 +81,7 @@ def mutual_nearest_neighbor(points0, points1, threshold=0.001):
     return matched_points0, matched_points1, indices0, indices1
 
 
-def common_matched_data_mnn(cam_infos, matched_data, threshold=1e-3):
+def common_matched_data_mnn(cam_infos, matched_data, dic=None, threshold=1e-3):
 
     common_matched_data = {}
 
@@ -92,7 +90,10 @@ def common_matched_data_mnn(cam_infos, matched_data, threshold=1e-3):
     for current_key in image_keys:
 
         common_matched_data[current_key] = {}
-        other_keys = [key for key in image_keys if key != current_key]
+        if dic is None:
+            other_keys = [key for key in image_keys if key != current_key]
+        else:
+            other_keys = dic[current_key]
         for other_key in other_keys:
             common_matched_data[current_key][other_key] = {}
         for i, prev_key in tqdm(enumerate(other_keys[:-1]), desc="common_matched_data"):
@@ -124,18 +125,21 @@ def common_matched_data_mnn(cam_infos, matched_data, threshold=1e-3):
     return common_matched_data
 
 
-def common_matched_data_mnn2(cam_infos, matched_data, threshold=1e-3):
+
+def common_matched_data_mnn2(cam_infos, matched_data, dic=None, threshold=1e-3):
 
     common_matched_data = {}
 
     image_keys = [cam_info.image_name for cam_info in cam_infos]
     for current_key in image_keys:
-
         common_matched_data[current_key] = {}
-        other_keys = [key for key in image_keys if key != current_key]
+        if dic is None:
+            other_keys = [key for key in image_keys if key != current_key]
+        else:
+            other_keys = dic[current_key]
         for other_key in other_keys:
             common_matched_data[current_key][other_key] = {}
-        for i, prev_key in tqdm(enumerate(other_keys[:-1]), desc="common_matched_data"):
+        for i, prev_key in enumerate(other_keys[:-1]):
             for next_key in other_keys[i + 1:]:
 
                 # 获取匹配点（归一化坐标）
@@ -144,7 +148,7 @@ def common_matched_data_mnn2(cam_infos, matched_data, threshold=1e-3):
 
                 # 使用 MNN 对齐 T01 和 T12
                 aligned_points_t10, aligned_points_t12, indices_t10, indices_t12 = mutual_nearest_neighbor(
-                    points_prev_to_current, points_current_to_next, threshold=threshold
+                    points_prev_to_current, points_current_to_next, threshold=0.003
                 )
                 mask10 = torch.zeros(len(points_prev_to_current), dtype=torch.bool).cuda()
                 mask12 = torch.zeros(len(points_current_to_next), dtype=torch.bool).cuda()
@@ -153,7 +157,7 @@ def common_matched_data_mnn2(cam_infos, matched_data, threshold=1e-3):
 
                 assert mask10.sum().item() == len(indices_t10) and mask12.sum().item() == len(indices_t12)
                 a = len(indices_t12)
-                print(current_key, prev_key, next_key, a)
+                print('common points: ', current_key, prev_key, next_key, a)
 
                 common_matched_data[current_key][prev_key][next_key] = mask10
                 common_matched_data[current_key][next_key][prev_key] = mask12

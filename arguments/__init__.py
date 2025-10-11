@@ -77,7 +77,6 @@ class PipelineParams(ParamGroup):
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
         self.iterations = 2_000
-        # self.iterations = 2_500
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
@@ -121,36 +120,65 @@ def get_combined_args(parser: ArgumentParser):
     return Namespace(**merged_dict)
 
 
-from datetime import datetime
-
-# 获取当前日期
-current_date = datetime.now()
-# 格式化为 yymmdd（250530）
-date_str = current_date.strftime('%y%m%d')
-time_str = current_date.strftime('%H%M%S')
-
 
 class SparseParams(ParamGroup):
     def __init__(self, parser, sentinel=False, is_training=False):
-        # self.is_train = False
 
-        self.input_root = '/home/mayu/thesis/SCGaussian/data'
         self.input_views = 3
         self.dataset = 'nerf_llff_data'
         self.scene_type = ''
-        self.category = ''
-        self.output_root = '/home/mayu/thesis/SCGaussian/output'
-        self.is_draw = True
+        self.is_training = is_training
+        self.switch_intermediate_result = False
+        # 100:HLDE 010:VVS 001:OAR
+        self.run_module = 0b110
+
+        # Matching Prior
+        self.switch_generate_matching_mono = 0
+        self.matching_method = 'dkm'
         self.top_k = 10000
         self.inv_scale = 4
         self.dfactor = 8
-        self.depth_range_coeff = (0.8, 1.2)
 
-        self.switch_virtual_batch_size = True
-        self.switch_intermediate_result = 0
-        # self.switch_virtual_batch_size = False
-        self.virtual_batch_size = 100
-        self.matching_method = 'dkm'
+        # Hybrid_Depth_Estimation
+        self.switch_setup_init = True
+        self.num_iterations = 2000
+        self.filter_iteration = 1000
+        self.neighbor_dis = 3.
+        self.propagate_weight = 0.5
+        self.start_propagate_iteration = 1000
+        self.render_propagate_weight = 0.05
+        self.start_render_propagate_iteration = 1
+
+        # Outliner_Filtering_Mechanism
+        self.switch_dynamic_filter = True
+        self.tau_depth = 0.3
+        self.tau_reproj = 0.1
+        self.base_thresh = 0.2
+        self.range_sensitivity = 0.2
+        self.switch_second_filter = True
+        self.secondary_filtering_number = 100
+
+        # Bidirectional_Warping
+        self.virtual_cam_num = 50
+        self.warping_mode = 'bidirectional_warp' # or 'forward_warping'
+        self.switch_small_transform = True
+        self.small_transform_iter = 50
+        self.switch_nearest_warping = False
+        self.nearest_warping_num = 20
+        self.switch_middle_pose = True
+        self.interpolate_middle_pose_num = 1
+        self.virtual_source_num = 2  # top-k
+        self.start_virtual_render = 1000
+        self.top_percent = 99.5
+        self.reg_interval = 6
+
+        # Occlusion-Aware Reconstruction
+        self.occ_select_pipe = 'simple_lama'
+        self.test_dilate = 8
+        self.test_max_distance = 4
+        self.occlusion_interval = 1500
+
+
         self.matched_image_basedir = 'matched_image'
         self.resized_image_basedir = 'resized_image'
         self.hybrid_depth_basedir = 'hybrid_depth'
@@ -158,74 +186,6 @@ class SparseParams(ParamGroup):
         self.mono_depth_map_basedir = 'mono_depth_map'
         self.middle_camera_basedir = 'middle_camera'
         self.occlusion_image_basedir = 'occlusion_image'
-
-        self.switch_generate_matching_mono = 0
-
-
-        self.run_module = 0b110
-        self.log_file_path = '/home/mayu/thesis/SCGaussian/outputtest/flower110/123.txt'
-
-        self.num_iterations = 2000
-        self.filter_iteration = 1_000
-        self.neighbor_dis = 3.
-        self.propagate_weight = 0.5
-        self.start_propagate_iteration = 1_000
-
-        self.render_neighbor_dis = 3
-        self.render_propagate_weight = 0.05
-        self.start_render_propagate_iteration = 1
-
-        self.switch_setup_init = True
-        # self.switch_setup_init = False
-        self.switch_dynamic_filter = True
-        # self.switch_dynamic_filter = False
-        self.tau_depth = 0.3
-        self.tau_reproj = 0.1
-        self.base_thresh = 0.2
-        self.range_sensitivity = 0.2
-        self.switch_second_filter = True
-        # self.switch_second_filter = False
-        self.smooth_iteration = 750
-        self.mconf_threshold = 0
-        self.use_mask = False
-        self.distance_percentile = (0, 98)
-        self.buffer_size = 30
-        self.lr_decay_steps = [500, 1000, 1500]
-        self.ratio = 0.5
-
-        self.virtual_cam_num = 50
-        self.warping_mode = 'backward_warping'
-        # self.warping_mode = 'forward_warping'
-        self.switch_small_transform = 1
-        # self.switch_small_transform = 0
-        self.small_transform_iter = 50
-        # self.switch_nearest_warping = 1
-        self.switch_nearest_warping = 0
-        self.nearest_warping_num = 20
-        self.switch_middle_pose = 1
-        # self.switch_middle_pose = 0
-        self.interpolate_middle_pose_num = 1
-        self.virtual_source_num = 2
-        self.start_virtual_render = 1000
-        self.occ_select_pipe = 'simple_lama'
-        self.top_percent = 99.5
-        # self.mvs_depth_loss_w = 0.1
-        # self.mono_depth_loss_w = 0.005
-        self.unseen_lambda_dssim = 0.5
-        self.reg_interval = 6
-
-        self.test_dilate = 8
-        self.test_max_distance = 4
-        # self.occlusion_from_iter = 1_500
-        # self.occlusion_until_iter = 2_200
-        self.occlusion_interval = 1500
-        # self.occlusion_iter = 50
-
-        self.date = date_str
-        self.time_str = time_str
-        self.width = 1008
-        self.height = 752
-        self.output_dir = str(os.path.join(self.output_root, self.date))
         self.resized_image_dir = None
         self.mono_depth_map_dir = None
         self.matched_image_dir = None
@@ -233,7 +193,6 @@ class SparseParams(ParamGroup):
         self.virtual_camera_dir = None
         self.middle_camera_dir = None
         self.occlusion_image_dir = None
-        self.is_training = is_training
 
         super().__init__(parser, "Loading Parameters", sentinel)
 

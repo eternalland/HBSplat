@@ -5,7 +5,7 @@ import cv2
 from typing import Tuple, Optional
 import os
 from tqdm import tqdm
-from utils import fore_back_recognize
+from skimage import morphology
 
 
 def optimize_depth_alignment(
@@ -161,22 +161,23 @@ def gather_in_one(cam_dir, min_loss_state):
 
 
 
-def aligned_depth_scale2(args, cam_infos, gaussians):
+def aligned_depth_scale(args, cam_infos, gaussians):
     cam_dir = gaussians.view_gs
     os.makedirs(output_dir := os.path.join(args.hybrid_depth_dir, "aligned_mono_depth"), exist_ok=True)
-    for cam_info in tqdm(cam_infos, desc="aligned_depth_scale2"):
+    for cam_info in tqdm(cam_infos, desc="aligned_depth_scale"):
         image_name = cam_info.image_name
         z_points = torch.hstack((cam_dir[image_name]['pixel_gather'], cam_dir[image_name]['z_cam_gather'])).cpu().numpy()
         mono_depth_map = np.array(cam_info.mono_depth_map.cpu().numpy())
-        foreground_mask = fore_back_recognize.generate_foreground_mask2(args, image_name, mono_depth_map)
+        foreground_mask = generate_foreground_mask(args, image_name, mono_depth_map)
 
         height, width = mono_depth_map.shape[:2]
         sparse_depth_map, weight_map = create_depth_map_from_sparse(z_points, height = height, width = width)
         sparse_depth_map = foreground_mask * sparse_depth_map
         aligned_mono_depth, ema_loss, final_scale, final_shift = optimize_depth_alignment(source_depth = mono_depth_map, target_depth = sparse_depth_map, valid_mask = sparse_depth_map>0, depth_weights = weight_map)
         cam_info.aligned_mono_depth_map = torch.from_numpy(aligned_mono_depth).cuda()
-        aligned_mono_depth_path = str(os.path.join(output_dir, f'{image_name}_aligned_mono_depth.jpg'))
-        save_depth_map(aligned_mono_depth, aligned_mono_depth_path)
+        if args.switch_intermediate_result:
+            aligned_mono_depth_path = str(os.path.join(output_dir, f'{image_name}_aligned_mono_depth.jpg'))
+            save_depth_map(aligned_mono_depth, aligned_mono_depth_path)
 
 def aligned_depth_scale_small(args, cam_infos, gaussians):
     cam_dir = gaussians.view_gs
@@ -189,8 +190,9 @@ def aligned_depth_scale_small(args, cam_infos, gaussians):
         sparse_depth_map, weight_map = create_depth_map_from_sparse(z_points, height = height, width = width)
         aligned_mono_depth, ema_loss, final_scale, final_shift = optimize_depth_alignment(source_depth = mono_depth_map, target_depth = sparse_depth_map, valid_mask = sparse_depth_map>0, depth_weights = weight_map)
         cam_info.aligned_mono_depth_map_small = torch.from_numpy(aligned_mono_depth).cuda()
-        aligned_mono_depth_path = str(os.path.join(output_dir, f'{image_name}_aligned_mono_depth_small.jpg'))
-        save_depth_map(aligned_mono_depth, aligned_mono_depth_path)
+        if args.switch_intermediate_result:
+            aligned_mono_depth_path = str(os.path.join(output_dir, f'{image_name}_aligned_mono_depth_small.jpg'))
+            save_depth_map(aligned_mono_depth, aligned_mono_depth_path)
 
 
 
@@ -210,3 +212,16 @@ def save_depth_map(depth_map: np.ndarray, save_path: str) -> None:
     depth_map_colored = cv2.applyColorMap(depth_map_uint8, cv2.COLORMAP_JET)
     cv2.imwrite(save_path, depth_map_colored)
 
+
+def generate_foreground_mask(args, image_name, mono_depth_map):
+    # background_mask = get_sky_mask_adaptive(mono_depth_map, top_percent=args.top_percent)
+    threshold = np.percentile(mono_depth_map, args.top_percent)
+    sky_mask = np.zeros_like(mono_depth_map, dtype=np.uint8).astype(bool)
+    if threshold < 0.4:
+        sky_mask = (mono_depth_map >= threshold)
+        sky_mask = morphology.remove_small_holes(sky_mask, area_threshold=64)
+        sky_mask = morphology.remove_small_objects(sky_mask, min_size=64)
+    foreground_mask = (sky_mask == False)
+    image_path = os.path.join(args.mono_depth_map_dir, f'{image_name}_foreground_mask.png')
+    cv2.imwrite(image_path, foreground_mask.astype(np.uint8) * 255)
+    return foreground_mask

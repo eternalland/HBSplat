@@ -7,8 +7,6 @@ import sys
 from argparse import ArgumentParser
 
 
-
-
 def calculate_avg(ssim, psnr, lpips):
     """
     根据公式计算avg值：
@@ -35,81 +33,30 @@ def calculate_avg(ssim, psnr, lpips):
         return 0.0
 
 parser = ArgumentParser(description="Training script parameters")
-parser.add_argument("--base_dir", type=str, default = None)
+parser.add_argument("--model_path", type=str, default = None)
+parser.add_argument("--dataset", type=str, default = None)
 args = parser.parse_args(sys.argv[1:])
-base_dir = args.base_dir
-print(base_dir)
-if base_dir is None:
-    # 指定目录路径
-    base_dir = "/home/mayu/thesis/HBSplat/output/ll_110"  # 请替换为实际的目录路径
-
-
-post_fixs = []
-post_fixs.append('')
-post_fixs.append('001_0_10000_3')
-post_fixs.append('000_0_10000_3')
-post_fixs.append('111_0_10000_3')
-post_fixs.append('110_0_10000_3')
-post_fixs.append('110_0_10000_8')
-post_fixs.append('100_0_10000_8')
-post_fixs.append('000_0_10000_24')
-post_fixs.append('110_0_10000_24')
-post_fixs.append('100_0_10000_24')
-post_fixs.append('000_0_10000_8')
-post_fixs.append('010_0_10000_8')
-post_fixs.append('100_0_10000_3')
-post_fixs.append('999')
-
-
-
+model_path = args.model_path
+dataset = args.dataset
+print('model_path: ', model_path)
+print('dataset: ', dataset)
 
 # 定义要处理的scene文件夹列表
 scenes = []
-if "ll" in base_dir:
+if "ll" in dataset.lower():
     scenes = ["fern", "flower", "fortress", "horns", "leaves", "orchids", "room", "trex"]
-elif "ib" in base_dir:
+elif "ib" in model_path.lower():
     scenes = ["zc12", "zc14", "zc15", "zc16", "zc17", "zc18"]
-elif "bl" in base_dir:
+elif "bl" in model_path.lower():
     scenes = ["chair", "drums", "ficus", "hotdog", "lego", "materials", "mic", "ship"]
-elif "dt" in base_dir:
+elif "dt" in model_path.lower():
     scenes = ["scan8", "scan21", "scan30", "scan31", "scan34", "scan38", "scan40", "scan41", "scan45", "scan55", "scan63", "scan82", "scan103", "scan110", "scan114"]
-elif "tt" in base_dir:
+elif "tt" in model_path.lower():
     scenes = ["Family", "Francis", "Horse", "Lighthouse", "M60", "Panther", "Playground", "Train"]
 
-if "scg_" in base_dir or 'SCGaussian_ori' in base_dir  or 'HBSplat' in base_dir or 'SCG' in base_dir:
-    head = "ours_2000"
-    target = 'results'
-elif "gaussian-splatting" in base_dir:
-    head = "ours_30000"
-    target = 'results'
-elif "FSGS" in base_dir or "SID" in base_dir:
-    head = "ours_10000"
-    target = 'results'
-elif "DNGaussian" in base_dir:
-    head = "ours_6000"
-    target = 'results_eval'
-elif "MCGS" in base_dir:
-    head = "blender_8"
-    target = 'results'
-else:
-    print('none')
-    sys.exit()
 
-post_fix = ''
-for post_fix1 in post_fixs:
-    path = os.path.join(base_dir, scenes[0] + post_fix1)
-    if post_fix == '999':
-        print("不存在：", path)
-        sys.exit()
-    if os.path.exists(path):
-        post_fix = post_fix1
-        break
-
-
-new_scenes = []
-for scene in scenes:
-    scene += post_fix
-    new_scenes.append(scene)
+head = "ours_2000"
+target = 'results'
 
 
 # 存储所有场景的指标数据
@@ -118,7 +65,7 @@ metrics_sum = defaultdict(float)
 metrics_count = defaultdict(int)
 
 # 创建输出文件路径
-output_file = os.path.join(base_dir, "metrics_summary.txt")
+output_file = os.path.join(model_path, "metrics_summary.txt")
 
 # 定义列宽（根据实际数据调整）
 scene_width = 25  # 增加第一列宽度
@@ -137,8 +84,8 @@ with open(output_file, 'w', encoding='utf-8') as f:
     f.write(separator)
 
     # 遍历每个scene文件夹
-    for scene in new_scenes:
-        scene_dir = os.path.join(base_dir, scene)
+    for scene in scenes:
+        scene_dir = os.path.join(model_path, scene)
         json_path = os.path.join(scene_dir, f"{target}.json")
 
         try:
@@ -188,7 +135,6 @@ with open(output_file, 'w', encoding='utf-8') as f:
             metrics_sum["SSIM"] += ssim
             metrics_sum["PSNR"] += psnr
             metrics_sum["LPIPS"] += lpips
-            metrics_sum["AVG"] += avg_val
 
             metrics_count["SSIM"] += 1
             metrics_count["PSNR"] += 1
@@ -225,7 +171,7 @@ with open(output_file, 'w', encoding='utf-8') as f:
         avg_ssim = metrics_sum["SSIM"] / metrics_count["SSIM"]
         avg_psnr = metrics_sum["PSNR"] / metrics_count["PSNR"]
         avg_lpips = metrics_sum["LPIPS"] / metrics_count["LPIPS"]
-        avg_avg = metrics_sum["AVG"] / metrics_count["AVG"]
+        avg_avg = calculate_avg(avg_ssim, avg_psnr, avg_lpips)
 
         avg_line = f"{'Average':<{scene_width}} {avg_ssim:<{metric_width}.6f} {avg_psnr:<{metric_width}.6f} {avg_lpips:<{metric_width}.6f} {avg_avg:<{metric_width}.6f}\n"
 

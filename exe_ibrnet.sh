@@ -1,15 +1,15 @@
 GPU_ids=0
 
-dataset=blender
-scenes=(chair drums ficus hotdog lego materials mic ship)
+dataset=ibrnet
+scenes=(zc12 zc14 zc15 zc16 zc17 zc18)
 
-data_path=./data/nerf_synthetic
-output_path=./output/bl_110
+data_path=./data/ibrnet
+output_path=./output/ib_110/
 res=2
 run_module=6
 
-inv_scale=2
-input_views=8
+inv_scale=1
+input_views=3
 switch_generate_matching_mono=0
 
 
@@ -28,22 +28,18 @@ do
 
     echo ========================= $dataset Train: $scene =========================
     CUDA_VISIBLE_DEVICES=$GPU_ids python train.py -s $data_path/$scene -r $res -m $output_path/$scene \
-     --eval --white_background \
      --run_module $run_module \
-     --input_views $input_views  --neighbor_dis 3 --secondary_filtering_number 100 \
-     --tau_reproj 0.1 --base_thresh 0.002 --range_sensitivity 0.002  \
-     --interpolate_middle_pose_num 2 --virtual_source_num 1 \
+     --input_views $input_views  --neighbor_dis 2 \
+     --tau_reproj 0.1 --base_thresh 0.2 --range_sensitivity 0.1 \
+     --eval \
      --switch_generate_matching_mono $switch_generate_matching_mono
 
     echo ========================= $dataset Render: $scene =========================
-    CUDA_VISIBLE_DEVICES=$GPU_ids python render.py -m $output_path/$scene$post_fix \
-    --input_views $input_views \
-    --white_background
-
+    CUDA_VISIBLE_DEVICES=$GPU_ids python render.py -m $output_path/$scene \
+    --input_views $input_views  \
 
     echo ========================= $dataset Metric: $scene =========================
-    CUDA_VISIBLE_DEVICES=$GPU_ids python metrics.py -m $output_path/$scene$post_fix \
-
+    CUDA_VISIBLE_DEVICES=$GPU_ids python metrics.py -m $output_path/$scene
 
     echo ========================= $dataset Finish: $scene =========================
 done
