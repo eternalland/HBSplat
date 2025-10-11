@@ -51,6 +51,9 @@ HBSplat is a novel unified framework designed to tackle the challenge of **high-
    pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
    
    # Install 
+   mkdir submodules && cd submodules
+   git clone https://github.com/ashawkey/diff-gaussian-rasterization --recursive 
+   git clone https://gitlab.inria.fr/bkerbl/simple-knn.git
    pip install submodules/diff-gaussian-rasterization submodules/simple-knn
    
    # Install dependencies
