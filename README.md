@@ -63,11 +63,14 @@ HBSplat is a novel unified framework designed to tackle the challenge of **high-
    # Our project relies on two external components for dense matching and depth estimation.
    git clone https://github.com/xuelunshen/gim.git
    git clone https://github.com/apple/ml-depth-pro.git
+   
+   # Modify paths in HBSplat/data_preprocess/config.py and HBSplat/data_preprocess/get_mono_depth.py
+   # Download checkpoint in gim & ml-depth-pro homepage
    ```
 
 ## **📚 Dataset Preparation**
 
-download: [LLFF](https://www.matthewtancik.com/nerf), [ibrnet](https://github.com/googleinterns/IBRNet?tab=readme-ov-file) , [blender](https://www.matthewtancik.com/nerf) , [dtu](https://roboimagedata.compute.dtu.dk/?page_id=36),  [Tanks&Temple](https://www.tanksandtemples.org/)
+download: [LLFF](https://www.matthewtancik.com/nerf), [ibrnet](https://github.com/googleinterns/IBRNet?tab=readme-ov-file) , [blender](https://www.matthewtancik.com/nerf) , [dtu](https://roboimagedata.compute.dtu.dk/?page_id=36),  [Tanks&Temple ](https://www.tanksandtemples.org/)
 
 Matching datas and mono depth map datas of LLFF, Blender, and ibrnet datasets are provided from [here](https://drive.google.com/drive/folders/1lBg8iQs4DVFVRLhX29yxtngE-n6q0YMV).
 
