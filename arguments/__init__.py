@@ -197,7 +197,7 @@ class SparseParams(ParamGroup):
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def update_from_args(self, args):
-        """从解析的参数更新实例属性"""
+        """Update instance attributes from parsed arguments"""
         for arg_name in vars(self):
             if hasattr(args, arg_name):
                 setattr(self, arg_name, getattr(args, arg_name))

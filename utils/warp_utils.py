@@ -10,14 +10,14 @@ from scene.cameras import Camera, TempCamera, save_pose
 def generate_virtual_poses(args, viewpoint_stack) -> List['TempCamera']:
     # input_cams = list(cam_dir.values())
     input_cams = viewpoint_stack
-    print(f'输入视图数量: {len(input_cams)}')
+    print(f'Input view count: {len(input_cams)}')
     v_num = args.virtual_cam_num
-    print(f'生成虚拟位姿数量: {v_num}')
+    print(f'Generated virtual pose count: {v_num}')
 
-    # 1. 生成目标虚拟位姿（所有输入视图共享同一组目标位姿）
+    # 1. Generate target virtual poses (all input views share the same set of target poses)
     # bounds = np.stack([cam.bounds for cam in input_cams])
     bounds = np.stack([cam.bounds for cam in input_cams])
-    # 从所有输入位姿生成目标位姿
+    # Generate target poses from all input poses
     all_input_extrs = np.stack([cam.w2c.cpu().numpy() for cam in input_cams])
 
     print('scene_type : ', args.scene_type)
@@ -28,14 +28,14 @@ def generate_virtual_poses(args, viewpoint_stack) -> List['TempCamera']:
             target_c2ws = pose_utils.generate_pseudo_poses_llff(all_input_extrs, bounds, n_poses=v_num)
         if args.scene_type == '360':
             target_c2ws = pose_utils.generate_ellipse_path_from_camera_infos(all_input_extrs, n_frames=v_num)
-        # 转换为外参矩阵
+        # Convert to extrinsic matrix
         target_w2cs = np.stack([np.linalg.inv(pose) for pose in target_c2ws])
 
     if args.switch_middle_pose:
         interpolated_w2cs = middle_pose_utils.generate_virtual_poses(all_input_extrs, args.interpolate_middle_pose_num).astype(np.float32)
         target_w2cs = np.concatenate([target_w2cs, interpolated_w2cs], axis=0)
 
-    # 保存结果
+    # Save results
     virtual_cams = []
     camera = input_cams[0]
     for index, target_w2c in enumerate(target_w2cs):
@@ -46,7 +46,7 @@ def generate_virtual_poses(args, viewpoint_stack) -> List['TempCamera']:
         height, width = camera.image_height, camera.image_width
         FovX, FovY = camera.FoVx, camera.FoVy
 
-        # 创建虚拟相机
+        # Create virtual camera
         cam_info = TempCamera(R=R, T=T, K=K, w2c=w2c, width=width, height=height, FovX=FovX, FovY=FovY,
                               image_data=None, image_name=None, image_path=None)
         cam_info.id = str(index)
@@ -61,36 +61,36 @@ def compute_important_scores(sparse_args, input_cams, virtual_cams):
     input_w2cs = np.stack([graphics_utils.getWorld2View(input_cam.R, input_cam.T) for input_cam in input_cams])
     target_w2cs = np.stack([graphics_utils.getWorld2View(virtual_cam.R, virtual_cam.T) for virtual_cam in virtual_cams])
 
-    # 确保输入是NumPy数组
+    # Ensure input is NumPy array
     input_extrs = np.asarray(input_w2cs)
     target_poses = np.asarray(target_w2cs)
 
-    # 提取位置和旋转
+    # Extract positions and rotations
     input_pos = input_extrs[:, :3, 3]  # (N, 3)
     target_pos = target_poses[:, :3, 3]  # (M, 3)
     input_rot = input_extrs[:, :3, :3]  # (N, 3, 3)
     target_rot = target_poses[:, :3, :3]  # (M, 3, 3)
 
-    # 计算距离矩阵 (M, N)
+    # Compute distance matrix (M, N)
     dist_matrix = np.sqrt(np.sum((target_pos[:, np.newaxis] - input_pos) ** 2, axis=2))
 
-    # 计算旋转差异矩阵 (M, N)
+    # Compute rotation difference matrix (M, N)
     rot_diff = np.einsum('mik,njk->mnij', target_rot, input_rot)  # (M,N,3,3)
     traces = np.diagonal(rot_diff, axis1=2, axis2=3).sum(axis=2)  # (M,N)
     rot_diff_matrix = np.arccos(np.clip((traces - 1) / 2, -1, 1))
 
-    # 综合评分 (平移权重0.8，角度权重0.2)
+    # Combined score (translation weight 0.8, angle weight 0.2)
     dist_scores = 0.7 * np.exp(-dist_matrix / np.mean(dist_matrix))
     angle_scores = 0.3 * np.exp(-rot_diff_matrix / np.mean(rot_diff_matrix))
     combined_scores = dist_scores + angle_scores
 
-    # 旋转、平移小于阈值，指示
+    # Rotation and translation below threshold, indicator
 
 
-    # 为每个目标位姿选择top-K输入视图
+    # Select top-K input views for each target pose
     nearest_indices = np.argsort(-combined_scores, axis=1)[:, :min(sparse_args.virtual_source_num, input_extrs.shape[0])]
     print('virtual_source_num: ', sparse_args.virtual_source_num)
-    # 距离分数，与所有训练视图的距离分数
+    # Distance scores with all training views
     scores = np.sum(combined_scores, axis=1)
 
 
@@ -131,10 +131,10 @@ def generate_virtual_cams_blend(args, source_cams, target_cams, nearest_indices,
         print('small_transform_mask, ', small_transform_mask.sum().item())
 
 
-    # 3. 初始化Warper和结果存储
+    # 3. Initialize Warper and result storage
     warper = Warper()
 
-    # 多视图前向扭曲（逐个处理）
+    # Multi-view forward warping (process one by one)
     '''
     warped_images=tensor(b, 3, h, w), valid_masks=tensor(b, 1, h, w), warped_depths=tensor(b, 1, h, w)
     '''
@@ -188,7 +188,7 @@ def generate_virtual_cams_blend(args, source_cams, target_cams, nearest_indices,
 
     if args.switch_intermediate_result:
         for index in range(len(warped_images)):
-            # 保存结果
+            # Save results
             plot_utils.save_image(warped_images[index], os.path.join(warped_dir, f"{index}_image.jpg"))
             plot_utils.save_depth_map(warped_depths[index], os.path.join(depths_dir, f"{index}_depth.jpg"))
             # depth_map = vis_depth(warped_depths[index].detach().squeeze(0).cpu().numpy())
@@ -200,11 +200,11 @@ def generate_virtual_cams_blend(args, source_cams, target_cams, nearest_indices,
 def compute_small_transform_mask(input_cams, virtual_cams,
                                  rotation_factor=1, translation_factor=1):
 
-    # 提取输入和虚拟相机的R和T（确保是PyTorch张量）
+    # Extract R and T of input and virtual cameras (ensure PyTorch tensors)
     input_w2cs = np.stack([graphics_utils.getWorld2View(input_cam.R, input_cam.T) for input_cam in input_cams])
     target_w2cs = np.stack([graphics_utils.getWorld2View(virtual_cam.R, virtual_cam.T) for virtual_cam in virtual_cams])
 
-    # 提取位置和旋转
+    # Extract positions and rotations
     input_rot = input_w2cs[:, :3, :3]  # (N, 3, 3)
     input_pos = input_w2cs[:, :3, 3]  # (N, 3)
     target_rot = target_w2cs[:, :3, :3]  # (M, 3, 3)
@@ -215,36 +215,36 @@ def compute_small_transform_mask(input_cams, virtual_cams,
     virtual_R = torch.from_numpy(target_rot).cuda()  # (M, 3, 3)
     virtual_T = torch.from_numpy(target_pos).cuda() # (M, 3)
 
-    # 计算输入相机之间的平均旋转和平移差异（用于动态阈值）
+    # Compute average rotation and translation differences between input cameras (for dynamic threshold)
     with torch.no_grad():
-        # 1. 计算输入相机之间的旋转差异（基于R的迹）
+        # 1. Compute rotation differences between input cameras (based on R's trace)
         input_rot_diff = torch.einsum('bik,bjk->bij', input_R, input_R.transpose(1, 2))  # (B,3,3)
         traces = input_rot_diff.diagonal(dim1=1, dim2=2).sum(dim=1)  # (B,)
         mean_rot_diff = torch.acos(torch.clamp((traces - 1) / 2, min=-1, max=1)).mean().item()
 
-        # 2. 计算输入相机之间的平均平移距离
+        # 2. Compute average translation distance between input cameras
         input_pos = input_T  # (B, 3)
         dist_matrix = torch.cdist(input_pos, input_pos, p=2)  # (B, B)
         mean_translation = dist_matrix.mean().item()
 
-    # 动态阈值：基于输入数据的统计
+    # Dynamic threshold: based on input data statistics
     max_rotation_rad = rotation_factor * mean_rot_diff
     max_translation = translation_factor * mean_translation
 
-    # 计算每个虚拟视点与最近参考视图的差异
+    # Compute differences between each virtual viewpoint and nearest reference view
     mask = []
     for i in range(len(virtual_cams)):
-        # 计算平移距离（取最近的参考视图）
+        # Compute translation distance (to nearest reference view)
         dist = torch.norm(virtual_T[i] - input_T.squeeze(-1), dim=1)  # (B,)
         min_dist = dist.min().item()
 
-        # 计算旋转差异（与最近参考视图的旋转矩阵迹）
+        # Compute rotation difference (rotation matrix trace with nearest reference view)
         nearest_input_idx = dist.argmin()
         rot_diff = input_R[nearest_input_idx].T @ virtual_R[i]  # (3,3)
         trace = torch.trace(rot_diff)
         angle_diff = torch.acos(torch.clamp((trace - 1) / 2, min=-1, max=1)).item()
 
-        # 判断是否满足阈值条件
+        # Determine if threshold condition is met
         if angle_diff < max_rotation_rad and min_dist < max_translation:
             mask.append(True)
         else:

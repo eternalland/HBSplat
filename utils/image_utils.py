@@ -33,12 +33,12 @@ import torch.nn.functional as F
 from PIL import Image
 
 
-# 设置中文显示字体
+# Set Chinese display font
 from pylab import mpl
 mpl.rcParams["font.sans-serif"] = ["SimHei"]
 
 def read_image(image_path: str, grayscale: bool = False) -> np.ndarray:
-    """读取图像，支持彩色或灰度格式"""
+    """Read image, supports color or grayscale format"""
     if grayscale:
         image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     else:
@@ -62,16 +62,16 @@ def resize_intrinsic(K_ori: np.ndarray, scale: float) -> np.ndarray:
 
 
 def resize_image_with_scale(image: np.ndarray, scale: float = None, dfactor: int = 8):
-    """调整图像尺寸，返回调整后的图像和新尺寸"""
+    """Resize image, returns resized image and new dimensions"""
     size = image.shape[:2][::-1]  # (width, height)
 
-    # 第一次 resize：根据 resize_max 缩放
+    # First resize: scale based on resize_max
     if scale is not None and scale < 1.0:
         print('scale: ', scale)
         new_size = tuple(int(round(x * scale)) for x in size)
         image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
 
-    # 第二次 resize：确保尺寸能被 dfactor 整除
+    # Second resize: ensure dimensions divisible by dfactor
     new_size = tuple(int(x // dfactor * dfactor) for x in image.shape[:2][::-1])
     if new_size != image.shape[:2][::-1]:
         image = cv2.resize(image, new_size, interpolation=cv2.INTER_LINEAR)
@@ -81,38 +81,38 @@ def resize_image_with_scale(image: np.ndarray, scale: float = None, dfactor: int
 
 
 def save_image(image: np.ndarray, save_path: str):
-    """保存图像到指定路径"""
+    """Save image to specified path"""
     save_image_data = image.clip(0, 255).astype(np.uint8)
     cv2.imwrite(save_path, save_image_data)
 
 
 def resize_to_multiple(image_data: torch.Tensor, multiple: int = 8):
     """
-    将图像和掩膜缩放到指定整数倍的尺寸
+    Scale image and mask to size that is multiple of specified integer
     Args:
-        image_data: 输入图像 (3, H, W) RGB格式
-        multiple: 需要缩放的整数倍 (默认32，常用CNN下采样倍数)
+        image_data: Input image (3, H, W) RGB format
+        multiple: Integer multiple to scale to (default 32, common CNN downsampling multiple)
     Returns:
-        resized_image: 缩放后的图像 (3, H', W')
+        resized_image: Scaled image (3, H', W')
     """
     assert image_data.dim() == 3
     h, w = image_data.shape[1:]
 
-    # 计算目标尺寸（向下取整到最近的multiple倍数）
+    # Calculate target size (round down to nearest multiple)
     new_h = (h // multiple) * multiple
     new_w = (w // multiple) * multiple
 
-    # 如果已经是整数倍则直接返回
+    # Return directly if already a multiple
     if new_h == h and new_w == w:
         return image_data
 
-    # 双线性插值缩放图像
+    # Scale image with bilinear interpolation
     resized_image = F.interpolate(
-        image_data.unsqueeze(0),  # 添加batch维度 (1, 3, H, W)
+        image_data.unsqueeze(0),  # Add batch dimension (1, 3, H, W)
         size=(new_h, new_w),
         mode='bilinear',
         align_corners=False
-    ).squeeze(0)  # 移除batch维度
+    ).squeeze(0)  # Remove batch dimension
 
     return resized_image
 
@@ -122,28 +122,28 @@ def resize_pil_to_multiple(
         multiple: int = 32
 ) -> Image.Image:
     """
-    将PIL图像缩放到指定整数倍的尺寸（保持宽高比）
+    Scale PIL image to size that is multiple of specified integer (maintain aspect ratio)
 
     Args:
-        image_data: PIL格式的输入图像 (RGB模式)
-        multiple: 需要缩放的整数倍 (默认32)
+        image_data: Input image in PIL format (RGB mode)
+        multiple: Integer multiple to scale to (default 32)
 
     Returns:
-        resized_image: 缩放后的PIL图像
+        resized_image: Scaled PIL image
     """
-    assert isinstance(image_data, Image.Image), "输入必须是PIL.Image"
+    assert isinstance(image_data, Image.Image), "Input must be PIL.Image"
 
     w, h = image_data.size
 
-    # 计算目标尺寸（向下取整到最近的multiple倍数）
+    # Calculate target size (round down to nearest multiple)
     new_w = (w // multiple) * multiple
     new_h = (h // multiple) * multiple
 
-    # 如果已经是整数倍则直接返回
+    # Return directly if already a multiple
     if new_w == w and new_h == h:
         return image_data
 
-    # 使用LANCZOS高质量缩滤波
+    # Use LANCZOS high-quality scaling filter
     return image_data.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
@@ -151,16 +151,16 @@ def resize_pil_to_multiple(
 
 
 def to_torch_cuda(image: np.ndarray, grayscale: bool = False, device: str = '') -> torch.Tensor:
-    """将NumPy图像转换为PyTorch Tensor并放到CUDA上"""
-    # 通道调整并归一化
+    """Convert NumPy image to PyTorch Tensor and put on CUDA"""
+    # Channel adjustment and normalization
     if grayscale:
         assert image.ndim == 2, f"Expected grayscale image with 2 dims, got {image.shape}"
         image = image[None]  # (1, H, W)
     else:
         image = image.transpose((2, 0, 1))  # HxWxC to CxHxW
-    image = image / 255.0  # 归一化到 [0, 1]
+    image = image / 255.0  # Normalize to [0, 1]
 
-    # 转换为 PyTorch Tensor
+    # Convert to PyTorch Tensor
     image_tensor = torch.from_numpy(image).float()
     image_tensor = image_tensor.to(device)[None]
 

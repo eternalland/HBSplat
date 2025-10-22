@@ -215,15 +215,15 @@ def composite_loss(image, gt_image, mask, alpha=0.8):
 
 
 
-# 替换原始Pearson损失
+# Replace original Pearson loss
 def adaptive_depth_loss(rendered_depth, virtual_depth):
-    # 计算深度梯度作为置信度
+    # Compute depth gradient as confidence
     depth_grad = torch.abs(sobel_filter(virtual_depth))
-    conf = torch.exp(-depth_grad * 10).squeeze(0)  # 平滑区域置信度高
+    conf = torch.exp(-depth_grad * 10).squeeze(0)  # High confidence in smooth regions
 
-    # 加权Pearson损失
+    # Weighted Pearson loss
     valid = (virtual_depth > 0)
-    if valid.sum() > 10:  # 确保有足够有效点
+    if valid.sum() > 10:  # Ensure enough valid points
         corr = pearson_corrcoef(rendered_depth[valid], -virtual_depth[valid])
         # return corr
         return (1 - corr.item()) * conf[valid].mean().item()
@@ -231,19 +231,19 @@ def adaptive_depth_loss(rendered_depth, virtual_depth):
 
 
 
-# 创建Sobel滤波器
+# Create Sobel filter
 def sobel_filter(image: torch.Tensor) -> torch.Tensor:
     """
     Args:
-        image: (B, C, H, W) 输入图像
+        image: (B, C, H, W) input image
     Returns:
-        (B, C, H, W) 梯度幅值
+        (B, C, H, W) gradient magnitude
     """
-    # 计算x/y方向梯度
+    # Compute x/y direction gradients
     image = image.unsqueeze(0)
     grad_x = kornia.filters.sobel(image)
 
-    # 合并梯度
+    # Merge gradients
     return grad_x
 
 
@@ -261,7 +261,7 @@ def exponential_ramp(n, m, p, q, current_iter, k=5):
     if current_iter < n:
         return p
     elif current_iter <= m:
-        t = (current_iter - n) / (m - n)  # 归一化到 [0, 1]
+        t = (current_iter - n) / (m - n)  # Normalize to [0, 1]
         return p + (q - p) * (1 - math.exp(-k * t))
     else:
         return q

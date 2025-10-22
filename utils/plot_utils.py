@@ -63,9 +63,9 @@ def filter_outliers(depth_map, percentile = (3, 97), is_normal = False):
     middle = (depth_map_max - depth_map_min) / 2.
     depth_map = np.nan_to_num(depth_map, nan=depth_map_min)
     min_quantile, max_quantile = np.percentile(depth_map, percentile)
-    if max_quantile < middle: # 97%的点 挤在左半区
+    if max_quantile < middle: # 97% of points squeezed in left half
         depth_map = np.clip(depth_map, None, max_quantile)
-    if min_quantile > middle: # 97%的点 挤在右半区
+    if min_quantile > middle: # 97% of points squeezed in right half
         depth_map = np.clip(depth_map, None, min_quantile)
 
     if is_normal:
@@ -80,17 +80,17 @@ def filter_outliers(depth_map, percentile = (3, 97), is_normal = False):
 
 def save_depth_map(depth_map: torch.tensor, save_path: str, pseudo_color = True):
     """
-    保存深度图为伪彩色图像。
+    Save depth map as pseudo-color image.
 
     Args:
-        depth_map (torch.Tensor): 深度图张量，形状 (H, W) 或 (1, H, W)。
-        save_path (str): 保存路径。
-        pseudo_color (bool): 伪彩色图像。
+        depth_map (torch.Tensor): Depth map tensor, shape (H, W) or (1, H, W).
+        save_path (str): Save path.
+        pseudo_color (bool): Pseudo-color image.
     """
     if depth_map.ndim == 3:
         depth_map = depth_map.squeeze(0)
 
-    depth_map = depth_map.detach().cpu().numpy()  # 确保转换为numpy数组
+    depth_map = depth_map.detach().cpu().numpy()  # Ensure conversion to numpy array
 
     depth_map_normalized = filter_outliers(depth_map, is_normal = True)
 
@@ -108,13 +108,13 @@ def save_depth_map(depth_map: torch.tensor, save_path: str, pseudo_color = True)
 
 def save_depth_map_mask(depth_map: np.array, mask : np.array, save_path: str, pseudo_color = True):
     """
-    保存深度图为伪彩色图像。
+    Save depth map as pseudo-color image.
 
     Args:
-        depth_map (np.array): 深度图张量，形状 (H, W) 或 (1, H, W)。
-        mask (np.array): 深度图张量，形状 (H, W) 或 (1, H, W)。
-        save_path (str): 保存路径。
-        pseudo_color (bool): 伪彩色图像。
+        depth_map (np.array): Depth map tensor, shape (H, W) or (1, H, W).
+        mask (np.array): Depth map tensor, shape (H, W) or (1, H, W).
+        save_path (str): Save path.
+        pseudo_color (bool): Pseudo-color image.
     """
     if len(depth_map.shape) == 3:
         depth_map = depth_map.squeeze(0)

@@ -165,14 +165,14 @@ def save_pose(output_dir, cameras):
 #
 def read_pose(input_dir):
     """
-    从 JSON 文件读取相机参数并返回 Camera 对象列表。
+    Read camera parameters from JSON file and return list of Camera objects.
 
     Args:
-        input_dir (str): 包含 virtual_cameras.json 的目录路径。
-        CameraClass (class): Camera 类的定义（需支持字段：R, T, image_name, width, height, FovX, FovY）。
+        input_dir (str): Directory path containing virtual_cameras.json.
+        CameraClass (class): Camera class definition (must support fields: R, T, image_name, width, height, FovX, FovY).
 
     Returns:
-        list: 包含所有 Camera 对象的列表。
+        list: List containing all Camera objects.
     """
     file_path = os.path.join(input_dir, "virtual_cameras.json")
     with open(file_path, 'r') as file:
@@ -180,11 +180,11 @@ def read_pose(input_dir):
 
     cameras = []
     for cam_data in json_cams:
-        # 从 JSON 恢复旋转矩阵 R 和平移向量 T
+        # Restore rotation matrix R and translation vector T from JSON
         rotation = np.array(cam_data['rotation'])
         position = np.array(cam_data['position'])
 
-        # 计算 c2w 矩阵并转换为 w2c（Rt）
+        # Compute c2w matrix and convert to w2c (Rt)
         c2w = np.eye(4)
         c2w[:3, :3] = rotation
         c2w[:3, 3] = position
@@ -194,11 +194,11 @@ def read_pose(input_dir):
                       [0., 0., 1.]
                       ], dtype=np.float32)
 
-        # 提取 R 和 T
-        R = w2c[:3, :3].transpose()  # 转置回原始 R
+        # Extract R and T
+        R = w2c[:3, :3].transpose()  # Transpose back to original R
         T = w2c[:3, 3]
 
-        # 创建 Camera 对象
+        # Create Camera object
         camera = TempCamera(
             R=R,
             T=T,
@@ -206,7 +206,7 @@ def read_pose(input_dir):
             w2c=w2c,
             width=cam_data['width'],
             height=cam_data['height'],
-            FovY=focal2fov(cam_data['fy'], cam_data['height']),  # 需实现 focal2fov
+            FovY=focal2fov(cam_data['fy'], cam_data['height']),  # Need to implement focal2fov
             FovX=focal2fov(cam_data['fx'], cam_data['width']),
             image_data=None,
             image_path=None,

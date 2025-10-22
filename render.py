@@ -27,20 +27,20 @@ import time
 import cv2
 
 def filter_outliers(depth_map, percentile = (3, 97), is_endpoint_filter=False):
-    # 处理NaN值
+    # Handle NaN values
     depth_map_min = np.nanmin(depth_map)
     depth_map = np.nan_to_num(depth_map, nan=depth_map_min)
 
-    # 计算分位数和中间值
+    # Compute quantiles and middle value
     min_quantile, max_quantile = np.percentile(depth_map, percentile)
     depth_range = depth_map.max() - depth_map.min()
     middle = depth_map.min() + depth_range / 2
 
-    if max_quantile < middle: # 97%的点 挤在左半区
+    if max_quantile < middle: # 97% of points squeezed in left half
         depth_map[depth_map > max_quantile] = max_quantile
         print("extreme max filter")
         # depth_map = np.clip(depth_map, None, max_quantile)
-    if min_quantile > middle: # 97%的点 挤在右半区
+    if min_quantile > middle: # 97% of points squeezed in right half
         depth_map[depth_map < min_quantile] = min_quantile
         print("extreme min filter")
         # depth_map = np.clip(depth_map, min_quantile, None)
@@ -65,17 +65,17 @@ def normalize_depth_map(depth_map: np.array):
 
 def save_depth_map(depth_map: torch.tensor, save_path: str, pseudo_color = True):
     """
-    保存深度图为伪彩色图像。
+    Save depth map as pseudo-color image.
 
     Args:
-        depth_map (torch.Tensor): 深度图张量，形状 (H, W) 或 (1, H, W)。
-        save_path (str): 保存路径。
-        pseudo_color (bool): 伪彩色图像。
+        depth_map (torch.Tensor): Depth map tensor, shape (H, W) or (1, H, W).
+        save_path (str): Save path.
+        pseudo_color (bool): Pseudo-color image.
     """
     if depth_map.ndim == 3:
         depth_map = depth_map.squeeze(0)
 
-    depth_map = depth_map.detach().cpu().numpy()  # 确保转换为numpy数组
+    depth_map = depth_map.detach().cpu().numpy()  # Ensure conversion to numpy array
 
     depth_map = filter_outliers(depth_map, percentile = (3, 97))
 

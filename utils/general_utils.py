@@ -35,9 +35,9 @@ def PILtoTorch2(pil_image, resolution):
     if depth_max != depth_min:
         depth_img = (resized_image - depth_min) / (depth_max - depth_min)
     else:
-        depth_img = torch.zeros_like(resized_image)  # 或者 depth_img.fill_(0.5)
+        depth_img = torch.zeros_like(resized_image)  # Or depth_img.fill_(0.5)
 
-    # 确保数据类型是float32
+    # Ensure data type is float32
     resized_image = depth_img.float().cuda()
     return resized_image
     

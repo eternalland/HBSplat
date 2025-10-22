@@ -82,14 +82,14 @@ def get_edge_boundaries(depth_edges, mode='min_rect', padding=5, min_area=100):
         if cv2.contourArea(cnt) < min_area:
             continue
 
-        if mode == 'min_rect':  # 最小外接矩形
+        if mode == 'min_rect':  # Minimum bounding rectangle
             x, y, w, h = cv2.boundingRect(cnt)
             boundaries.append((
                 [x - padding, y - padding, x + w + padding, y + h + padding],
                 'rect'
             ))
 
-        elif mode == 'rotated_rect':  # 旋转矩形
+        elif mode == 'rotated_rect':  # Rotated rectangle
             rect = cv2.minAreaRect(cnt)
             box = cv2.boxPoints(rect)
             boundaries.append((
@@ -97,15 +97,15 @@ def get_edge_boundaries(depth_edges, mode='min_rect', padding=5, min_area=100):
                 'rotated_rect'
             ))
 
-        elif mode == 'convex':  # 凸包
+        elif mode == 'convex':  # Convex hull
             hull = cv2.convexHull(cnt)
             boundaries.append((
                 hull,
                 'convex'
             ))
 
-        elif mode == 'multi_rect':  # 多独立矩形（分割大轮廓）
-            if cv2.contourArea(cnt) > min_area * 10:  # 对大轮廓分割
+        elif mode == 'multi_rect':  # Multiple independent rectangles (split large contours)
+            if cv2.contourArea(cnt) > min_area * 10:  # Split large contours
                 mask = np.zeros_like(depth_edges)
                 cv2.drawContours(mask, [cnt], -1, 1, -1)
                 kernel = np.ones((15, 15), np.uint8)
@@ -127,16 +127,16 @@ def get_edge_boundaries(depth_edges, mode='min_rect', padding=5, min_area=100):
     return boundaries
 
 def generate_local_foreground_mask(foreground_mask, depth_edges, padding=10, min_area=50):
-    # 1. 获取多矩形边界框
+    # 1. Get multiple rectangle bounding boxes
     boundaries = get_edge_boundaries(depth_edges, mode='min_rect', padding=padding, min_area=min_area)
     rect_boundaries = [bbox for bbox, btype in boundaries if btype == 'rect']
 
-    # 2. 初始化局部掩码
+    # 2. Initialize local mask
     local_foreground_mask = np.zeros_like(foreground_mask)
 
-    # 3. 对每个矩形框提取前景区域
+    # 3. Extract foreground regions for each rectangle box
     for (x1, y1, x2, y2) in rect_boundaries:
-        # 裁剪矩形区域内的前景掩码
+        # Crop foreground mask within rectangle region
         rect_mask = foreground_mask[y1:y2, x1:x2]
         local_foreground_mask[y1:y2, x1:x2] = np.logical_or(
             local_foreground_mask[y1:y2, x1:x2],
@@ -147,7 +147,7 @@ def generate_local_foreground_mask(foreground_mask, depth_edges, padding=10, min
 
 def get_foreground_mask_from_edges(planes, depth_edges):
 
-    edge_pixels = np.argwhere(depth_edges == 1)  # 边缘像素坐标
+    edge_pixels = np.argwhere(depth_edges == 1)  # Edge pixel coordinates
     plane_votes = np.zeros(len(planes), dtype=int)
 
     for y, x in edge_pixels:
@@ -165,12 +165,12 @@ def detect_depth_edges(depth_map, gradient_threshold=0.1, blur_kernel=5):
 
     depth_blur = cv2.GaussianBlur(depth_map, (blur_kernel, blur_kernel), 0)
 
-    # 计算梯度幅值（Sobel算子）
+    # Compute gradient magnitude (Sobel operator)
     grad_x = cv2.Sobel(depth_blur, cv2.CV_64F, 1, 0, ksize=3)
     grad_y = cv2.Sobel(depth_blur, cv2.CV_64F, 0, 1, ksize=3)
     grad_mag = np.sqrt(grad_x ** 2 + grad_y ** 2)
 
-    # 归一化梯度并阈值化
+    # Normalize gradient and apply threshold
     grad_mag = (grad_mag - grad_mag.min()) / (grad_mag.max() - grad_mag.min())
     edges = (grad_mag > gradient_threshold).astype(np.uint8) * 255
 
@@ -180,7 +180,7 @@ def generate_depth_planes(depth_map, n_planes=5, mode='uniform'):
 
     planes = []
     if mode == 'uniform':
-        thresholds = np.linspace(0, 1, n_planes + 1)  # 包括0和1
+        thresholds = np.linspace(0, 1, n_planes + 1)  # Include 0 and 1
     elif mode == 'percentile':
         thresholds = np.percentile(depth_map, np.linspace(0, 100, n_planes + 1))
 
@@ -202,12 +202,12 @@ def generate_depth_planes(depth_map, n_planes=5, mode='uniform'):
 
 def fill_holes_by_closing(mask, kernel_size=3):
     """
-    通过形态学闭运算填充小空洞
+    Fill small holes using morphological closing operation
     Args:
-        mask: 二值掩码（0或1）
-        kernel_size: 卷积核大小（奇数）
+        mask: Binary mask (0 or 1)
+        kernel_size: Kernel size (odd number)
     Returns:
-        filled_mask: 修复后的掩码
+        filled_mask: Repaired mask
     """
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     filled_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)

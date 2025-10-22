@@ -100,14 +100,14 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
 
             if 0b001 & sparse_args.run_module:
                 if iteration == sparse_args.occlusion_interval + 1:
-                    print(f"同时启用010、001\nocclusion_interval: {sparse_args.occlusion_interval}\nreg_interval: {sparse_args.reg_interval}")
+                    print(f"Enable both 010 and 001\nocclusion_interval: {sparse_args.occlusion_interval}\nreg_interval: {sparse_args.reg_interval}")
                 if iteration > sparse_args.occlusion_interval and iteration % sparse_args.reg_interval == 0:
                     viewpoint_cam = unseen_viewpoint_stack.pop(randint(0, len(unseen_viewpoint_stack) - 1))
                 else:
                     viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
             else:
                 if iteration == sparse_args.reg_interval:
-                    print(f"启用010，无001\nstart_virtual_render: {sparse_args.start_virtual_render}\nreg_interval: {sparse_args.reg_interval}")
+                    print(f"Enable 010, without 001\nstart_virtual_render: {sparse_args.start_virtual_render}\nreg_interval: {sparse_args.reg_interval}")
                 if iteration > sparse_args.start_virtual_render and iteration % sparse_args.reg_interval == 0:
                     viewpoint_cam = unseen_viewpoint_stack.pop(randint(0, len(unseen_viewpoint_stack) - 1))
                 else:
@@ -169,12 +169,12 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
                 image[:, ~mask] = 1.0
                 gt_image[:, ~mask] = 1.0
 
-            # # 改进：对掩码边缘区域软化约束
+            # # Improvement: soften constraints on mask edge regions
             def get_soft_mask(mask, kernel_size=(5, 5), sigma=1.0):
                 blurred_mask = cv2.GaussianBlur(mask, kernel_size, sigma)
                 return torch.from_numpy(blurred_mask).unsqueeze(0).cuda()  # (1,H,W)
 
-            soft_mask = get_soft_mask(mask.float().cpu().numpy())  # 值在[0,1]之间
+            soft_mask = get_soft_mask(mask.float().cpu().numpy())  # Values in [0,1] range
 
             image_masked = image * soft_mask
             gt_image_masked = gt_image * soft_mask
@@ -184,13 +184,13 @@ def training(dataset, opt, pipe, sparse_args, testing_iterations, saving_iterati
             loss += render_weight * unseen_v_loss
             depth_map = viewpoint_cam.depth_map * soft_mask
             rendered_depth = render_pkg["rendered_depth"] * soft_mask
-            # 深度损失（改进版）
+            # Depth loss (improved version)
             depth_loss = loss_utils.adaptive_depth_loss(rendered_depth, depth_map)
             loss += 0.1 * depth_loss
 
         if 0b100 & sparse_args.run_module and (viewpoint_cam.mono_depth_map is not None) and 'blender' not in sparse_args.dataset:
             if iteration == sparse_args.start_render_propagate_iteration:
-                print("\n开启propagate_from_renderdepth：", sparse_args.render_propagate_weight)
+                print("\nEnable propagate_from_renderdepth:", sparse_args.render_propagate_weight)
             if iteration >= sparse_args.start_render_propagate_iteration:
                 render_propagate_loss = gaussians.get_propagate_from_renderdepth(viewpoint_cam, render_pkg["rendered_depth"])
                 loss += sparse_args.render_propagate_weight * render_propagate_loss
@@ -334,7 +334,7 @@ import time
 
 
 def format_time(seconds):
-    """将秒转换为分钟和秒的格式"""
+    """Convert seconds to minutes and seconds format"""
     minutes = int(seconds // 60)
     remaining_seconds = seconds % 60
     return f"{minutes}m {remaining_seconds:.4f}s"

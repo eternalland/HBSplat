@@ -127,7 +127,7 @@ class GaussianModel:
 
         self.training_setup(training_args)
 
-        # 保存剩余点云
+        # Save remaining point cloud
         points = self.get_xyz
         print(len(points))
         path = os.path.join(args.occlusion_image_dir, "occlusion_points.ply")
@@ -165,7 +165,7 @@ class GaussianModel:
         print(len(self._zval))
 
     def _update_optimizer(self, training_args):
-        # 更新现有优化器的参数组
+        # Update existing optimizer parameter groups
         param_groups = [
             {'params': [self._zval], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "zval"},
             {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
@@ -318,7 +318,7 @@ class GaussianModel:
 
                 valid_mask = (mask0 * mask1) > 0
 
-                # 可知"z_val"是世界坐标系下的深度
+                # Note that "z_val" is depth in world coordinate system
                 world_pts0 = (rayso0 + raysd0 * zvald0).permute(1, 0)
                 world_pts1 = (rayso1 + raysd1 * zvald1).permute(1, 0)
 
@@ -363,7 +363,7 @@ class GaussianModel:
                 if indices0 is None or indices2 is None:
                     continue
 
-                # 获取相机参数
+                # Get camera parameters
                 intr0, w2c0 = cam_dir[key0]["intr"], cam_dir[key0]["w2c"]
                 intr2, w2c2 = cam_dir[key2]["intr"], cam_dir[key2]["w2c"]
                 width, height = cam_dir[key0]["width"], cam_dir[key0]["height"]
@@ -380,47 +380,47 @@ class GaussianModel:
                 zvald2 = cam_dir[key2]["match_infos"][current_key]['z_val'][indices2]
                 mask2 = cam_dir[key2]["match_infos"][current_key]['blender_mask'][indices2]
 
-                # 确保匹配点数量一致
+                # Ensure matching point count is consistent
                 if len(uv0) != len(uv2):
                     print("Error: Mismatched number of matched points")
                     continue
 
-                # 计算有效掩码
+                # Compute valid mask
                 valid_mask = (mask0 * mask2) > 0
 
-                # 计算 世界3D点
-                world_pts0 = (rayso0 + raysd0 * zvald0).permute(1, 0)  # (k, 3) # key0的世界3D点
-                world_pts2 = (rayso2 + raysd2 * zvald2).permute(1, 0)  # (k, 3) # key2的世界3D点
+                # Compute world 3D points
+                world_pts0 = (rayso0 + raysd0 * zvald0).permute(1, 0)  # (k, 3) # World 3D points of key0
+                world_pts2 = (rayso2 + raysd2 * zvald2).permute(1, 0)  # (k, 3) # World 3D points of key2
 
-                # 重投影：从 key0 到 key2
+                # Reprojection: from key0 to key2
                 cam_pts_0to2 = torch.matmul(w2c2, torch.cat([world_pts0, torch.ones_like(world_pts0[:1])]))[:3]
                 xyz_0to2 = torch.matmul(intr2, cam_pts_0to2)
                 xy_0to2 = xyz_0to2[:2] / (xyz_0to2[2:] + 1e-8)
 
-                # 重投影：从 key2 到 key0
+                # Reprojection: from key2 to key0
                 cam_pts_2to0 = torch.matmul(w2c0, torch.cat([world_pts2, torch.ones_like(world_pts2[:1])]))[:3]
                 xyz_2to0 = torch.matmul(intr0, cam_pts_2to0)
                 xy_2to0 = xyz_2to0[:2] / (xyz_2to0[2:] + 1e-8)
 
-                # 计算重投影误差
+                # Compute reprojection error
                 # {d,img0|,img1-img0|img1-img0->img2}
                 ml_0t2 = ((xy_0to2 - uv2).abs() / torch.tensor([width, height],
                                                                device=uv2.device).type_as(uv2).reshape(2, 1)).mean(dim=0)
                 ml_2t0 = ((xy_2to0 - uv0).abs() / torch.tensor([width, height],
                                                                device=uv0.device).type_as(uv0).reshape(2, 1)).mean(dim=0)
 
-                # 记录损失
+                # Record loss
                 if key0 not in loss_state:
                     loss_state[key0] = {}
                 if key2 not in loss_state:
                     loss_state[key2] = {}
 
-                # 调整img0的z
+                # Adjust z of img0
                 loss_state[key0][current_key][indices0] += ml_0t2
                 # {idx∈img1,|img1-img0,|img1-img0<->img1-img2}
                 loss_state[key2][current_key][indices2] += ml_2t0
 
-                # 累加损失（加权）
+                # Accumulate loss (weighted)
                 final_mask = valid_mask
                 if final_mask.sum() > 0:
                     propagate_loss += (ml_0t2[final_mask] * mask0[final_mask]).mean() + (ml_2t0[final_mask] * mask2[final_mask]).mean()
@@ -449,9 +449,9 @@ class GaussianModel:
             match_depth0 = F.grid_sample(depth0.unsqueeze(0).unsqueeze(0), norm_grid0, mode="bilinear")
             match_depth0 = match_depth0.reshape(-1)
 
-            # 渲染深度是相机坐标系下的深度，而‘z_val’是世界坐标系下的深度，所以需要转换
+            # Rendered depth is in camera coordinate system, while 'z_val' is in world coordinate system, so conversion is needed
             rayso0, raysd0, cam_rays_d0 = match_data["rays_o"], match_data["rays_d"], match_data["cam_rays_d"]
-            # 转为世界坐标系下的深度
+            # Convert to depth in world coordinate system
             zval0 = (match_depth0 / cam_rays_d0[:, 2]).unsqueeze(-1)
             world_pts0 = (rayso0 + raysd0 * zval0).permute(1, 0)
 
@@ -476,7 +476,7 @@ class GaussianModel:
 
         cam_dir = self.view_gs
         common_matched_data = self.common_matched_data
-        # 相机名，例如 ["image1", "image2", "image3", "image4"]
+        # Camera names, e.g. ["image1", "image2", "image3", "image4"]
         keys = list(cam_dir.keys())
         propagate_loss = 0.0
 
@@ -663,10 +663,10 @@ class GaussianModel:
                 uv = v["uv"]
                 cam_rays_d = v["cam_rays_d"]
 
-                # depth是相机坐标系下的深度
+                # depth is in camera coordinate system
                 depth = z_val.squeeze(-1) * cam_rays_d[:, 2]
                 sparse_depth[(uv[:, 1].clamp(0, vgs["height"]-1).to(torch.int64), uv[:, 0].clamp(0, vgs["width"]-1).to(torch.int64))] = depth
-                # "z_val"是世界坐标系下的深度
+                # "z_val" is depth in world coordinate system
                 xyz = rayso + raysd * z_val
 
                 points.append(xyz)
@@ -747,7 +747,7 @@ class GaussianModel:
     def training_setup_init5(self, initial_lr = 0.5):
         l_init = []
         for key, vgs in self.view_gs.items():
-            # 动态调整初始学习率
+            # Dynamically adjust initial learning rate
             adjusted_lr = initial_lr
 
             l_init.append({
@@ -758,15 +758,15 @@ class GaussianModel:
 
         self.optimizer_init = torch.optim.Adam(l_init, eps=1e-15)
 
-        print("复杂场景：使用线性预热+恒定学习率")
+        print("Complex scene: using linear warmup + constant learning rate")
 
-        # 复杂场景：使用线性预热+恒定学习率
+        # Complex scene: using linear warmup + constant learning rate
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer_init,
-            lr_lambda=lambda epoch: 2.5  # 500步预热
+            lr_lambda=lambda epoch: 2.5  # 500 steps warmup
         )
 
-        # # 简单场景：使用余弦退火
+        # # Simple scene: using cosine annealing
         # self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         #     self.optimizer_init,
         #     T_max=2000,
@@ -1243,9 +1243,9 @@ class GaussianModel:
 
             image_width = cam_info.image_width
             image_height = cam_info.image_height
-            # 图像上某区域mask
+            # Mask for certain region on image
             occlusion_mask = cam_info.occlusion_mask
-            # 深度阈值mask
+            # Depth threshold mask
             occlusion_depth_threshold = cam_info.occlusion_depth_threshold
 
             points = self.get_xyz
@@ -1274,22 +1274,22 @@ class GaussianModel:
             x_idx = torch.round(x).long()  # (N,)
             y_idx = torch.round(y).long()  # (N,)
 
-            # 2. 边界裁剪（防止索引越界）
+            # 2. Boundary clipping (prevent index out of bounds)
             H, W = occlusion_mask.shape
-            x_idx = x_idx.clamp(0, W - 1)  # 限制在 [0, W-1]
-            y_idx = y_idx.clamp(0, H - 1)  # 限制在 [0, H-1]
+            x_idx = x_idx.clamp(0, W - 1)  # Limit to [0, W-1]
+            y_idx = y_idx.clamp(0, H - 1)  # Limit to [0, H-1]
 
-            # 3. 从occlusion_mask中提取标记
+            # 3. Extract markers from occlusion_mask
             occlusion_mask_idx = occlusion_mask[y_idx, x_idx] == 1  # (N,)
 
-            # 3. 获取满足两个条件的索引
+            # 3. Get indices satisfying both conditions
             filtered_indices = occlusion_depth_idx & occlusion_mask_idx
 
 
             indices_list.append(filtered_indices)
 
 
-            # 求并集
+            # Compute union
         if indices_list:
             whole_indices = torch.stack(indices_list).any(dim=0)
         else:

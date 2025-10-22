@@ -14,13 +14,13 @@ from utils import image_utils, plot_utils
 
 def load_model(device: str = 'cuda' if torch.cuda.is_available() else 'cpu') -> tuple:
     """
-    加载深度估计模型和预处理变换，移动到指定设备。
+    Load depth estimation model and preprocessing transform, move to specified device.
 
     Args:
-        device (str): 运行设备 ('cuda' 或 'cpu')。
+        device (str): Runtime device ('cuda' or 'cpu').
 
     Returns:
-        tuple: (model, transform)，加载的模型和变换函数。
+        tuple: (model, transform), loaded model and transform function.
     """
 
     config = depth_pro.DepthProConfig(
@@ -39,36 +39,36 @@ def load_model(device: str = 'cuda' if torch.cuda.is_available() else 'cpu') -> 
 
 def load_and_preprocess_image(image_path: str, transform, device: str) -> tuple:
     """
-    加载并预处理图像。
+    Load and preprocess image.
 
     Args:
-        image_path (str): 图像文件路径。
-        transform: 预处理变换函数（来自 depth_pro）。
-        device (str): 运行设备。
+        image_path (str): Image file path.
+        transform: Preprocessing transform function (from depth_pro).
+        device (str): Runtime device.
 
     Returns:
-        tuple: (image, f_px)，预处理后的张量和焦距（像素单位）。
+        tuple: (image, f_px), preprocessed tensor and focal length (in pixels).
     """
     try:
         image, _, f_px = utils.load_rgb(image_path)
         image = transform(image).to(device)
         return image, f_px
     except Exception as e:
-        print(f"加载图像 {image_path} 失败: {e}")
+        print(f"Failed to load image {image_path}: {e}")
         return None, None
 
 
 def infer_depth(model, image: torch.Tensor, f_px: float) -> torch.Tensor:
     """
-    运行深度估计推理。
+    Run depth estimation inference.
 
     Args:
-        model: 深度估计模型。
-        image (torch.Tensor): 预处理后的图像张量。
-        f_px (float): 焦距（像素单位）。
+        model: Depth estimation model.
+        image (torch.Tensor): Preprocessed image tensor.
+        f_px (float): Focal length (in pixels).
 
     Returns:
-        torch.Tensor: 深度图张量，形状 (H, W) 或 (1, H, W)。
+        torch.Tensor: Depth map tensor, shape (H, W) or (1, H, W).
     """
     with torch.no_grad():
         prediction = model.infer(image, f_px=f_px)
@@ -94,7 +94,7 @@ def generate_mono_depths(cam_infos, args):
         depth_normalized = plot_utils.save_depth_map(depth, save_path)
         mono_depth_map = Image.fromarray(depth_normalized)
         cam_infos[idx] = cam_info._replace(mono_depth_map=mono_depth_map)
-        print(f"深度图已保存到: {save_path}")
+        print(f"Depth map saved to: {save_path}")
 
 
 
@@ -146,27 +146,27 @@ def load_depth_maps(cam_infos, depth_image_dir: str):
             if cam_info.image_name in image:
                 image_depth_path = os.path.join(depth_image_dir, image)
                 try:
-                    # 读取深度图（假设为灰度或伪彩色）
+                    # Read depth map (assume grayscale or pseudo-color)
                     depth_img = cv2.imread(image_depth_path, cv2.IMREAD_GRAYSCALE)
                     if depth_img is None:
-                        print(f"无法读取深度图: {image_depth_path}")
+                        print(f"Unable to read depth map: {image_depth_path}")
                         continue
-                    # 如果是伪彩色 (H, W, 3)，转换为灰度 (H, W) 以近似深度值
+                    # If pseudo-color (H, W, 3), convert to grayscale (H, W) to approximate depth values
                     if len(depth_img.shape) == 3:
                         depth_img = cv2.cvtColor(depth_img, cv2.COLOR_BGR2GRAY)
-                    # 存储深度图，键为文件名（不含扩展名
+                    # Store depth map, key is filename (without extension)
 
-                    # 归一化深度图到 [0, 1]
+                    # Normalize depth map to [0, 1]
                     depth_min = np.min(depth_img)
                     depth_max = np.max(depth_img)
                     if depth_max != depth_min:
                         depth_img = (depth_img - depth_min) / (depth_max - depth_min)
                     else:
-                        depth_img = np.zeros_like(depth_img)  # 或 depth_img.fill(0.5)
+                        depth_img = np.zeros_like(depth_img)  # Or depth_img.fill(0.5)
 
                     depth_img = depth_img.astype(np.float32)
                     image = Image.fromarray(depth_img)
                     cam_infos[idx] = cam_info._replace(mono_depth_map=image)
                 except Exception as e:
-                    print(f"加载深度图 {image_depth_path} 失败: {e}")
+                    print(f"Failed to load depth map {image_depth_path}: {e}")
                     continue

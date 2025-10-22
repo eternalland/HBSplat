@@ -28,7 +28,7 @@ global model
 def lightglue_model(args):
     global detector
     global model
-    # 加载模型
+    # Load model
     detector = SuperPoint({
         'max_num_keypoints': args.top_k,
         'force_num_keypoints': True,
@@ -165,18 +165,18 @@ def lightglue_matching(data, image0, image1):
     b_ids = b_ids.cpu().numpy()
     mconf = mconf.cpu().numpy()
 
-    # 获取图像原始尺寸用于归一化
+    # Get original image size for normalization
     orig_h0, orig_w0 = image0.shape[-2:]
     orig_h1, orig_w1 = image1.shape[-2:]
 
-    # 归一化关键点到[0,1]范围(基于原始图像尺寸)
+    # Normalize keypoints to [0,1] range (based on original image size)
     norm_kpts0 = np.copy(kpts0)
-    norm_kpts0[:, 0] /= orig_w0  # x坐标除以图像宽度
-    norm_kpts0[:, 1] /= orig_h0  # y坐标除以图像高度
+    norm_kpts0[:, 0] /= orig_w0  # x coordinate divided by image width
+    norm_kpts0[:, 1] /= orig_h0  # y coordinate divided by image height
 
     norm_kpts1 = np.copy(kpts1)
-    norm_kpts1[:, 0] /= orig_w1  # x坐标除以图像宽度
-    norm_kpts1[:, 1] /= orig_h1  # y坐标除以图像高度
+    norm_kpts1[:, 0] /= orig_w1  # x coordinate divided by image width
+    norm_kpts1[:, 1] /= orig_h1  # y coordinate divided by image height
 
 
     data.update({'norm_kpts0': norm_kpts0, 'norm_kpts1': norm_kpts1, 'b_ids': b_ids, 'mconf': mconf})
@@ -195,16 +195,16 @@ def loftr_matching(data, image0, image1):
     b_ids = data['m_bids'].cpu().numpy()
     mconf = data['mconf'].cpu().numpy()
 
-    # 获取图像原始尺寸用于归一化
+    # Get original image size for normalization
     orig_h0, orig_w0 = image0.shape[-2:]
     orig_h1, orig_w1 = image1.shape[-2:]
-    # 归一化关键点到[0,1]范围(基于原始图像尺寸)
+    # Normalize keypoints to [0,1] range (based on original image size)
     norm_kpts0 = np.copy(kpts0)
-    norm_kpts0[:, 0] /= orig_w0  # x坐标除以图像宽度
-    norm_kpts0[:, 1] /= orig_h0  # y坐标除以图像高度
+    norm_kpts0[:, 0] /= orig_w0  # x coordinate divided by image width
+    norm_kpts0[:, 1] /= orig_h0  # y coordinate divided by image height
     norm_kpts1 = np.copy(kpts1)
-    norm_kpts1[:, 0] /= orig_w1  # x坐标除以图像宽度
-    norm_kpts1[:, 1] /= orig_h1  # y坐标除以图像高度
+    norm_kpts1[:, 0] /= orig_w1  # x coordinate divided by image width
+    norm_kpts1[:, 1] /= orig_h1  # y coordinate divided by image height
 
 
     data.update({'norm_kpts0': norm_kpts0, 'norm_kpts1': norm_kpts1, 'b_ids': b_ids, 'mconf': mconf})
@@ -222,16 +222,16 @@ def aspan_matching(data, image0, image1):
     b_ids = data['m_bids'].cpu().numpy()
     mconf = data['mconf'].cpu().numpy()
 
-    # 获取图像原始尺寸用于归一化
+    # Get original image size for normalization
     orig_h0, orig_w0 = image0.shape[-2:]
     orig_h1, orig_w1 = image1.shape[-2:]
-    # 归一化关键点到[0,1]范围(基于原始图像尺寸)
+    # Normalize keypoints to [0,1] range (based on original image size)
     norm_kpts0 = np.copy(kpts0)
-    norm_kpts0[:, 0] /= orig_w0  # x坐标除以图像宽度
-    norm_kpts0[:, 1] /= orig_h0  # y坐标除以图像高度
+    norm_kpts0[:, 0] /= orig_w0  # x coordinate divided by image width
+    norm_kpts0[:, 1] /= orig_h0  # y coordinate divided by image height
     norm_kpts1 = np.copy(kpts1)
-    norm_kpts1[:, 0] /= orig_w1  # x坐标除以图像宽度
-    norm_kpts1[:, 1] /= orig_h1  # y坐标除以图像高度
+    norm_kpts1[:, 0] /= orig_w1  # x coordinate divided by image width
+    norm_kpts1[:, 1] /= orig_h1  # y coordinate divided by image height
 
 
     data.update({'norm_kpts0': norm_kpts0, 'norm_kpts1': norm_kpts1, 'b_ids': b_ids, 'mconf': mconf})
