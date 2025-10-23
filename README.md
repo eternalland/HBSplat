@@ -64,7 +64,7 @@ HBSplat is a novel unified framework designed to tackle the challenge of **high-
    git clone https://github.com/xuelunshen/gim.git
    git clone https://github.com/apple/ml-depth-pro.git
    
-   # Modify paths in HBSplat/data_preprocess/config.py and HBSplat/data_preprocess/get_mono_depth.py
+   # Modify paths in HBSplat/data_preprocess/config.py
    # Download checkpoint in gim & ml-depth-pro homepage
    ```
 
