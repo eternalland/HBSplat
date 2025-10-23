@@ -36,6 +36,11 @@ do
     --tau_reproj 0.05 --base_thresh 0.05 --range_sensitivity 0.1 \
     --switch_generate_matching_mono $switch_generate_matching_mono \
 
+    if [ $switch_generate_matching_mono -eq 1 ]; then
+        continue
+    fi
+
+
     echo ========================= $dataset Render: $scene =========================
     CUDA_VISIBLE_DEVICES=$GPU_ids python render.py -m $output_path/$scene \
     --input_views $input_views  \

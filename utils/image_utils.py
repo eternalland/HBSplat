@@ -33,10 +33,6 @@ import torch.nn.functional as F
 from PIL import Image
 
 
-# Set Chinese display font
-from pylab import mpl
-mpl.rcParams["font.sans-serif"] = ["SimHei"]
-
 def read_image(image_path: str, grayscale: bool = False) -> np.ndarray:
     """Read image, supports color or grayscale format"""
     if grayscale:
@@ -190,6 +186,8 @@ def resize_images(args, cam_infos):
 
         temp_camera.point3D_ids = cam_info.point3D_ids
         temp_camera.bounds = cam_info.bounds
+        args.width = width
+        args.height = height
 
         temp_cameras.append(temp_camera)
     return temp_cameras

@@ -5,9 +5,9 @@ import warnings
 import numpy as np
 import sys
 
-import data_preprocess.config as config
+import data_preprocess.config as cf
+sys.path.insert(0, cf.get_gim_path())
 
-sys.path.insert(0, config.get_gim_path())
 from networks.lightglue.superpoint import SuperPoint
 from networks.lightglue.models.matchers.lightglue import LightGlue
 from networks.loftr.loftr import LoFTR
@@ -44,7 +44,7 @@ def lightglue_model(args):
     }).eval().to(args.device)
 
 
-    checkpoints_path = config.get_lightglue_weights_path()
+    checkpoints_path = cf.get_lightglue_weights_path()
     state_dict = torch.load(checkpoints_path, map_location='cpu')
     if 'state_dict' in state_dict.keys(): state_dict = state_dict['state_dict']
     for k in list(state_dict.keys()):
@@ -67,7 +67,7 @@ def loftr_model(args):
     # load model
     model = LoFTR(lower_config(get_cfg_defaults())['loftr'])
     # weights path
-    checkpoints_path = config.get_loftr_weights_path()
+    checkpoints_path = cf.get_loftr_weights_path()
     # load state dict
     state_dict = torch.load(checkpoints_path, map_location='cpu')
     if 'state_dict' in state_dict.keys(): state_dict = state_dict['state_dict']
@@ -97,7 +97,7 @@ def dkm_model(args):
     # load model
     model = DKMv3(weights=None, h=args.height, w=args.width)
     # weights path
-    checkpoints_path = config.get_dkm_weights_path()
+    checkpoints_path = cf.get_dkm_weights_path()
     # load state dict
     state_dict = torch.load(checkpoints_path, map_location='cpu')
     if 'state_dict' in state_dict.keys(): state_dict = state_dict['state_dict']
@@ -118,7 +118,7 @@ def roma_model(args):
     model = RoMa(img_size=[args.width])
     
     # weights path
-    checkpoints_path = config.get_roma_weights_path()
+    checkpoints_path = cf.get_roma_weights_path()
     # load state dict
     state_dict = torch.load(checkpoints_path, map_location='cpu')
     if 'state_dict' in state_dict.keys(): state_dict = state_dict['state_dict']

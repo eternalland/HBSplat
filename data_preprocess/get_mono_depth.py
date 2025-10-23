@@ -7,9 +7,10 @@ from tqdm import tqdm
 
 import sys
 
-sys.path.insert(0, '/home/mayu/thesis/ml-depth-pro/src')
+import data_preprocess.config as cf
+sys.path.insert(0, cf.get_mono_depth())
 from depth_pro import depth_pro, utils
-from utils import image_utils, plot_utils
+from utils import plot_utils
 
 
 def load_model(device: str = 'cuda' if torch.cuda.is_available() else 'cpu') -> tuple:
@@ -26,7 +27,7 @@ def load_model(device: str = 'cuda' if torch.cuda.is_available() else 'cpu') -> 
     config = depth_pro.DepthProConfig(
         patch_encoder_preset="dinov2l16_384",
         image_encoder_preset="dinov2l16_384",
-        checkpoint_uri="/home/mayu/thesis/ml-depth-pro/checkpoints/depth_pro.pt",
+        checkpoint_uri=cf.get_mono_ckpt(),
         decoder_features=256,
         use_fov_head=True,
         fov_encoder_preset="dinov2l16_384",
@@ -75,7 +76,7 @@ def infer_depth(model, image: torch.Tensor, f_px: float) -> torch.Tensor:
     return prediction["depth"]
 
 
-def generate_mono_depths(cam_infos, args):
+def generate_mono_depths(args, cam_infos):
     print(f"run mono_depth")
 
     output_dir = args.mono_depth_map_dir

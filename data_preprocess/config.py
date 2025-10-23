@@ -1,13 +1,16 @@
-_gim = '/home/mayu/thesis/gim'
-# _aspan = '/home/mayu/thesis/ml-aspanformer'
 _mono_depth = '/home/mayu/thesis/ml-depth-pro/src'
+_mono_ckpt = '/home/mayu/thesis/ml-depth-pro/checkpoints/depth_pro.pt'
 
+_gim = '/home/mayu/thesis/gim'
 _lightglue_weights_path = '/home/mayu/thesis/gim/weights/gim_lightglue_100h.ckpt'
 _loftr_weights_path = '/home/mayu/thesis/gim/weights/gim_loftr_50h.ckpt'
-# _aspan_weights_path = '/home/mayu/thesis/ml-aspanformer/weights/indoor.ckpt'
 _dkm_weights_path = '/home/mayu/thesis/gim/weights/gim_dkm_100h.ckpt'
 _roma_weights_path = '/home/mayu/thesis/gim/weights/gim_roma_100h.ckpt'
+# _aspan = '/home/mayu/thesis/ml-aspanformer'
+# _aspan_weights_path = '/home/mayu/thesis/ml-aspanformer/weights/indoor.ckpt'
 
+def get_mono_ckpt():
+    return _mono_ckpt
 
 def get_gim_path():
     return _gim

@@ -3,8 +3,8 @@ GPU_ids=0
 dataset=LLFF
 scenes=(fern flower fortress horns leaves orchids room trex)
 
-data_path=./data/nerf_llff_data
-output_path=./output/ll_110
+data_path=/home/mayu/thesis/HBSplat/data/nerf_llff_data
+output_path=/home/mayu/thesis/HBSplat/output/ll
 res=8
 run_module=6
 
@@ -36,6 +36,10 @@ do
      --tau_reproj 0.2 --base_thresh 0.17 --range_sensitivity 0.2 \
      --eval \
      --inv_scale $inv_scale --switch_generate_matching_mono $switch_generate_matching_mono
+
+    if [ $switch_generate_matching_mono -eq 1 ]; then
+        continue
+    fi
 
     echo ========================= $dataset Render: $scene =========================
     CUDA_VISIBLE_DEVICES=$GPU_ids python render.py -m $output_path/$scene \

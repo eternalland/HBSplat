@@ -2,20 +2,13 @@
 # @Author  : mayu
 import os.path
 
-import sys
 from tqdm import tqdm
-
-sys.path.insert(0, '/home/mayu/thesis/gim/')
 
 from utils import image_utils
 
 from data_preprocess.read_models import *
 
-import matplotlib
-matplotlib.use('agg')  # Set non-interactive backend, disable image display
 import matplotlib.pyplot as plt
-plt.rcParams['font.sans-serif'] = ['SimHei']  # Set Chinese font
-plt.rcParams['axes.unicode_minus'] = False    # Solve minus sign display issue
 
 
 
