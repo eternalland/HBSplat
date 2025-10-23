@@ -22,13 +22,13 @@ def virtual_view_synthesis(gaussians, scene, sparse_args, min_loss_state, viewpo
     small_transform_mask = warp_utils.compute_small_transform_mask(viewpoint_stack, virtual_cams)
 
     if sparse_args.switch_nearest_warping:
-        print("scores前多少个：", sparse_args.nearest_warping_num)
+        print("Top scores count:", sparse_args.nearest_warping_num)
         selected_indices = np.argsort(-scores)[:sparse_args.nearest_warping_num]
         virtual_cams = [virtual_cams[i] for i in selected_indices]
         nearest_indices = np.array([nearest_indices[i] for i in selected_indices])
         small_transform_mask = torch.tensor([small_transform_mask[i] for i in selected_indices], dtype=torch.bool)
     else:
-        print("不开nearest_warping_num：", len(virtual_cams))
+        print("nearest_warping_num disabled:", len(virtual_cams))
 
     warp_utils.generate_virtual_cams_blend(sparse_args, viewpoint_stack, virtual_cams,
                                               nearest_indices, small_transform_mask)

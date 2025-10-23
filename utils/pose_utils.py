@@ -52,32 +52,32 @@ def generate_random_poses_dtu(extrinsics, n_poses=120, r_scale=4.0):
 def generate_pseudo_poses_llff(extrinsics, bounds, n_poses, r_scale=2.0):
     poses = np.stack([np.linalg.inv(extrinsics[i]) for i in range(extrinsics.shape[0])])
 
-    # 计算合理的焦点深度，基于近深度和远深度的加权平均（视差空间）
+    # Calculate reasonable focal depth based on weighted average of near and far depth (disparity space)
     close_depth, inf_depth = bounds.min() * 0.9, bounds.max() * 5.0
     dt = 0.75
     focal = 1 / (((1 - dt) / close_depth + dt / inf_depth))
 
-    # 使用相机位置的 100 百分位数计算螺旋路径的半径，并应用缩放因子
+    # Use 100th percentile of camera positions to compute spiral path radius and apply scaling factor
     positions = poses[:, :3, 3]
     radii = np.percentile(np.abs(positions), 100, 0) * r_scale
-    radii = np.concatenate([radii, [1.0]])  # 添加齐次坐标维度
+    radii = np.concatenate([radii, [1.0]])  # Add homogeneous coordinate dimension
 
-    # 生成随机姿态
+    # Generate random poses
     random_poses = []
-    cam2world = poses_avg(poses)  # 计算平均相机到世界变换
-    up = poses[:, :3, 1].mean(0)  # 计算平均上向量
+    cam2world = poses_avg(poses)  # Compute average camera-to-world transformation
+    up = poses[:, :3, 1].mean(0)  # Compute average up vector
     for _ in range(n_poses):
-        random_pose = np.eye(4, dtype=np.float32)  # 初始化 4x4 单位矩阵
-        # 生成随机平移向量，范围 [-1, 1] 并按半径缩放
+        random_pose = np.eye(4, dtype=np.float32)  # Initialize 4x4 identity matrix
+        # Generate random translation vector in range [-1, 1] scaled by radius
         t = radii * np.concatenate([2 * np.random.rand(3) - 1.0, [1.0]])
-        position = cam2world @ t  # 将平移向量变换到世界坐标系
-        lookat = cam2world @ [0, 0, -focal, 1.0]  # 计算相机注视点
-        z_axis = position - lookat  # 计算相机 z 轴（从位置指向注视点）
-        # 使用视图矩阵生成相机姿态
+        position = cam2world @ t  # Transform translation vector to world coordinates
+        lookat = cam2world @ [0, 0, -focal, 1.0]  # Compute camera lookat point
+        z_axis = position - lookat  # Compute camera z-axis (from position to lookat point)
+        # Generate camera pose using view matrix
         random_pose[:3, :4] = viewmatrix(z_axis, up, position)
         random_poses.append(random_pose)
 
-    # 堆叠生成的姿态
+    # Stack generated poses
     return np.stack(random_poses, axis=0)
 
 
@@ -87,23 +87,23 @@ def unpad_poses(p):
 
 def pad_poses(p):
     """
-    为姿态矩阵添加齐次底行 [0,0,0,1]。
+    Add homogeneous bottom row [0,0,0,1] to pose matrix.
 
-    将形状为 [..., 3, 4] 的姿态矩阵扩展为 [..., 4, 4] 的齐次矩阵。
+    Extend pose matrix with shape [..., 3, 4] to homogeneous matrix [..., 4, 4].
 
-    参数
+    Parameters
     ----------
     p : np.ndarray
-        输入姿态矩阵，形状 [..., 3, 4]。
+        Input pose matrix, shape [..., 3, 4].
 
-    返回
+    Returns
     -------
     np.ndarray
-        扩展后的齐次姿态矩阵，形状 [..., 4, 4]。
+        Extended homogeneous pose matrix, shape [..., 4, 4].
     """
-    # 创建形状与 p[..., :1, :4] 相同的底行 [0, 0, 0, 1]
+    # Create bottom row [0, 0, 0, 1] with same shape as p[..., :1, :4]
     bottom = np.broadcast_to([0, 0, 0, 1.], p[..., :1, :4].shape)
-    # 将底行拼接到姿态矩阵，扩展为齐次矩阵
+    # Concatenate bottom row to pose matrix, extending to homogeneous matrix
     return np.concatenate([p[..., :3, :4], bottom], axis=-2)
 
 

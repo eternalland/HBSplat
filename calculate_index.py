@@ -9,19 +9,19 @@ from argparse import ArgumentParser
 
 def calculate_avg(ssim, psnr, lpips):
     """
-    根据公式计算avg值：
+    Calculate avg value based on formula:
     avg = exp(mean(log([10^(-psnr/10), sqrt(1 - ssim), lpips])))
     """
     try:
-        # 计算三个项
+        # Calculate three terms
         psnr_term = 10 ** (-psnr / 10)  # 10^(-psnr/10)
         ssim_term = math.sqrt(1 - ssim)  # sqrt(1 - ssim)
-        lpips_term = lpips  # lpips值
+        lpips_term = lpips  # lpips value
 
-        # 创建数组
+        # Create array
         terms = [psnr_term, ssim_term, lpips_term]
 
-        # 计算log然后mean然后exp
+        # Calculate log then mean then exp
         log_terms = [math.log(term) for term in terms]
         mean_log = np.mean(log_terms) if len(log_terms) > 0 else 0
         avg_value = math.exp(mean_log)
@@ -29,7 +29,7 @@ def calculate_avg(ssim, psnr, lpips):
         return avg_value
 
     except Exception as e:
-        print(f"计算avg值时出错: {e}")
+        print(f"Error calculating avg value: {e}")
         return 0.0
 
 parser = ArgumentParser(description="Training script parameters")
@@ -41,7 +41,7 @@ dataset = args.dataset
 print('model_path: ', model_path)
 print('dataset: ', dataset)
 
-# 定义要处理的scene文件夹列表
+# Define list of scene folders to process
 scenes = []
 if "ll" in dataset.lower():
     scenes = ["fern", "flower", "fortress", "horns", "leaves", "orchids", "room", "trex"]
@@ -59,22 +59,22 @@ head = "ours_2000"
 target = 'results'
 
 
-# 存储所有场景的指标数据
+# Store metrics data for all scenes
 all_metrics = []
 metrics_sum = defaultdict(float)
 metrics_count = defaultdict(int)
 
-# 创建输出文件路径
+# Create output file path
 output_file = os.path.join(model_path, "metrics_summary.txt")
 
-# 定义列宽（根据实际数据调整）
-scene_width = 25  # 增加第一列宽度
-metric_width = 12  # 指标列宽度
+# Define column widths (adjust based on actual data)
+scene_width = 25  # Increase first column width
+metric_width = 12  # Metrics column width
 
-# 同时输出到控制台和文件
+# Output to both console and file
 with open(output_file, 'w', encoding='utf-8') as f:
-    # 写入表头
-    # 写入表头
+    # Write header
+    # Write header
     header = f"{'Scene':<{scene_width}} {'SSIM':<{metric_width}} {'PSNR':<{metric_width}} {'LPIPS':<{metric_width}} {'AVG':<{metric_width}}\n"
     separator = "-" * (scene_width + 4 * metric_width) + "\n"
 
@@ -83,17 +83,17 @@ with open(output_file, 'w', encoding='utf-8') as f:
     f.write(header)
     f.write(separator)
 
-    # 遍历每个scene文件夹
+    # Iterate through each scene folder
     for scene in scenes:
         scene_dir = os.path.join(model_path, scene)
         json_path = os.path.join(scene_dir, f"{target}.json")
 
         try:
-            # 读取JSON文件
+            # Read JSON file
             with open(json_path, 'r') as json_file:
                 data = json.load(json_file)
 
-            # 获取指标数据
+            # Get metrics data
             # metrics = data.get("ours_2000", {})
             metrics = data.get(head, {})
 
@@ -108,20 +108,20 @@ with open(output_file, 'w', encoding='utf-8') as f:
             if len(metrics) == 0:
                 metrics = data.get("ours_500", {})
             if len(metrics) == 0:
-                print("出错")
+                print("Error")
                 sys.exit()
             ssim = metrics.get("SSIM", 0)
             psnr = metrics.get("PSNR", 0)
             lpips = metrics.get("LPIPS", 0)
             avg_val = metrics.get("AVG", 0)
 
-            # 如果JSON中没有AVG值，则手动计算
+            # If no AVG value in JSON, manually calculate
             if avg_val == 0:
                 avg_val = calculate_avg(ssim, psnr, lpips)
-                # print(f"为 {scene} 手动计算AVG值: {avg_val:.6f}")
+                # print(f"Manually calculated AVG value for {scene}: {avg_val:.6f}")
 
 
-            # 存储当前场景的指标
+            # Store current scene metrics
             scene_metrics = {
                 "scene": scene,
                 "SSIM": ssim,
@@ -131,7 +131,7 @@ with open(output_file, 'w', encoding='utf-8') as f:
             }
             all_metrics.append(scene_metrics)
 
-            # 累加指标值用于计算平均值
+            # Accumulate metric values for calculating average
             metrics_sum["SSIM"] += ssim
             metrics_sum["PSNR"] += psnr
             metrics_sum["LPIPS"] += lpips
@@ -141,32 +141,32 @@ with open(output_file, 'w', encoding='utf-8') as f:
             metrics_count["LPIPS"] += 1
             metrics_count["AVG"] += 1
 
-            # 格式化输出行
-            # 格式化输出行（左对齐）
+            # Format output line
+            # Format output line (left-aligned)
             output_line = f"{scene:<{scene_width}} {ssim:<{metric_width}.6f} {psnr:<{metric_width}.6f} {lpips:<{metric_width}.6f} {avg_val:<{metric_width}.6f}\n"
 
-            # 输出到控制台和文件
+            # Output to console and file
             print(output_line, end='')
             f.write(output_line)
 
         except FileNotFoundError:
-            error_msg = f"{scene:<15} JSON文件未找到: {json_path}\n"
+            error_msg = f"{scene:<15} JSON file not found: {json_path}\n"
             print(error_msg, end='')
             f.write(error_msg)
         except json.JSONDecodeError:
-            error_msg = f"{scene:<15} JSON文件格式错误: {json_path}\n"
+            error_msg = f"{scene:<15} JSON file format error: {json_path}\n"
             print(error_msg, end='')
             f.write(error_msg)
         except Exception as e:
-            error_msg = f"{scene:<15} 读取错误: {str(e)}\n"
+            error_msg = f"{scene:<15} Read error: {str(e)}\n"
             print(error_msg, end='')
             f.write(error_msg)
 
-    # 写入分隔线
+    # Write separator line
     print(separator, end='')
     f.write(separator)
 
-    # 计算并输出平均值
+    # Calculate and output average values
     if all_metrics:
         avg_ssim = metrics_sum["SSIM"] / metrics_count["SSIM"]
         avg_psnr = metrics_sum["PSNR"] / metrics_count["PSNR"]
@@ -178,8 +178,8 @@ with open(output_file, 'w', encoding='utf-8') as f:
         print(avg_line, end='')
         f.write(avg_line)
     else:
-        no_data_msg = "未找到任何有效的指标数据\n"
+        no_data_msg = "No valid metrics data found\n"
         print(no_data_msg, end='')
         f.write(no_data_msg)
 
-print(f"\n结果已保存到: {output_file}")
+print(f"\nResults saved to: {output_file}")

@@ -17,14 +17,14 @@ def optimize_depth_alignment(
         max_iterations: int = 10000,
         convergence_threshold: float = 1e-6
 ):
-    # 转换为PyTorch张量
+    # Convert to PyTorch tensor
     device = torch.device('cuda')
     source = torch.from_numpy(source_depth).float().to(device)
     target = torch.from_numpy(target_depth).float().to(device)
     mask = torch.from_numpy(valid_mask).bool().to(device)
     weights = torch.from_numpy(depth_weights).float().to(device)
 
-    # 修剪异常值
+    # Trim outliers
     with torch.no_grad():
         valid_depths = target[target > 1e-7]
         sorted_depths = torch.sort(valid_depths).values
@@ -35,20 +35,20 @@ def optimize_depth_alignment(
 
         mask = mask & (target > min_thresh) & (target < max_thresh)
 
-    # 准备优化数据
+    # Prepare optimization data
     source_masked = source[mask]
     target_masked = target[mask]
     weights_masked = weights[mask]
 
-    # 初始化可优化参数
+    # Initialize optimizable parameters
     scale = torch.ones(1, device=device, requires_grad=True)
     shift = torch.zeros(1, device=device, requires_grad=True)
 
-    # 设置优化器
+    # Set up optimizer
     optimizer = torch.optim.Adam([scale, shift], lr=1.0)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.8 ** (1 / 100))
 
-    # 优化循环
+    # Optimization loop
     prev_loss = float('inf')
     ema_loss = 0.0
     best_params = None
@@ -56,18 +56,18 @@ def optimize_depth_alignment(
     for iteration in progress_bar:
         aligned = scale * source_masked + shift
 
-        # 计算损失
+        # Compute loss
         mse_loss = torch.mean(((target_masked - aligned) ** 2) * weights_masked)
         hinge_loss = torch.mean(torch.relu(-aligned) ** 2) * 2.0
         total_loss = mse_loss + hinge_loss
 
-        # 优化步骤
+        # Optimization step
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
         scheduler.step()
 
-        # 检查收敛
+        # Check convergence
         ema_loss = total_loss.item() * 0.2 + ema_loss * 0.8
         if abs(ema_loss - prev_loss) < convergence_threshold:
             best_params = (scale.item(), shift.item())
@@ -80,7 +80,7 @@ def optimize_depth_alignment(
                                       "LR": f"{optimizer.param_groups[0]['lr']:.4f}"})
             prev_loss = total_loss.item()
 
-    # 应用最佳参数
+    # Apply best parameters
     with torch.no_grad():
         final_scale, final_shift = best_params or (scale.item(), shift.item())
         aligned_depth = (final_scale * source + final_shift).cpu().numpy()
@@ -90,20 +90,20 @@ def optimize_depth_alignment(
 
 
 def create_depth_map_from_sparse(
-        sparse_depth_map: np.ndarray,  # (n, 3) 格式: [u_norm, v_norm, depth]
+        sparse_depth_map: np.ndarray,  # (n, 3) format: [u_norm, v_norm, depth]
         height: int,
         width: int,
-        depth_weights: Optional[np.ndarray] = None  # (n,) 可选权重
+        depth_weights: Optional[np.ndarray] = None  # (n,) optional weights
 ) -> Tuple[np.ndarray, np.ndarray]:
-    # 初始化输出矩阵
+    # Initialize output matrix
     depth_map = np.zeros((height, width))
     weight_map = np.zeros((height, width))
 
-    # 转换归一化坐标到像素坐标
+    # Convert normalized coordinates to pixel coordinates
     u_pixel = np.round(sparse_depth_map[:, 0] * (width - 1)).astype(int)
     v_pixel = np.round(sparse_depth_map[:, 1] * (height - 1)).astype(int)
 
-    # 确保坐标在有效范围内
+    # Ensure coordinates are within valid range
     valid_mask = (u_pixel >= 0) & (u_pixel < width) & \
                  (v_pixel >= 0) & (v_pixel < height)
 
@@ -111,10 +111,10 @@ def create_depth_map_from_sparse(
     v_valid = v_pixel[valid_mask]
     depths = sparse_depth_map[valid_mask, 2]
 
-    # 填充深度图
+    # Fill depth map
     depth_map[v_valid, u_valid] = depths
 
-    # 处理权重
+    # Handle weights
     if depth_weights is not None:
         weights = depth_weights[valid_mask, 2]
         weight_map[v_valid, u_valid] = weights / weights.max()

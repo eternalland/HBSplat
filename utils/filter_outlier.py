@@ -8,18 +8,18 @@ from itertools import combinations
 
 
 def compute_dynamic_tau_depth(z_i, z_j, base_thresh=0.05, range_sensitivity=0.3):
-    # 计算联合深度统计量
+    # Compute combined depth statistics
     z_combined = torch.cat([z_i, z_j])
-    z_min = torch.quantile(z_combined, 0.02)  # 避免极端小值影响
-    z_max = torch.quantile(z_combined, 0.98)  # 避免极端大值影响
+    z_min = torch.quantile(z_combined, 0.02)  # Avoid extreme small values affecting results
+    z_max = torch.quantile(z_combined, 0.98)  # Avoid extreme large values affecting results
     z_range = z_max - z_min
 
-    # 动态调整策略 (近处严格，远处宽松)
+    # Dynamic adjustment strategy (strict for near, relaxed for far)
     z_avg = (z_i + z_j) / 2
     normalized_depth = (z_avg - z_min) / (z_range + 1e-6)
 
 
-    # 非线性阈值曲线 (sigmoid形式)
+    # Nonlinear threshold curve (sigmoid form)
     # sigmoid_term = torch.sigmoid(sigmoid_scale * normalized_depth - sigmoid_scale / 2)
     tau_depth = base_thresh + range_sensitivity * torch.sigmoid(2 * normalized_depth - 1)
 
@@ -28,34 +28,34 @@ def compute_dynamic_tau_depth(z_i, z_j, base_thresh=0.05, range_sensitivity=0.3)
 
 def filter_outliers_dynamic(e_ij, e_ji, z_i, z_j, switch_dynamic_filter, tau_reproj=0.1, tau_depth=3, base_thresh=0.2, range_sensitivity=0.2):
     """
-    输入:
-        z_i, z_j: 深度值 (n,)
-        e_ij, e_ji: 重投影误差 (n,)
-        tau_reproj: 重投影误差阈值（单位：像素）
-        tau_depth: 深度相对差异阈值
-    输出:
-        mask: 内点掩码 (True=内点)
+    Input:
+        z_i, z_j: Depth values (n,)
+        e_ij, e_ji: Reprojection errors (n,)
+        tau_reproj: Reprojection error threshold (unit: pixels)
+        tau_depth: Depth relative difference threshold
+    Output:
+        mask: Inlier mask (True=inlier)
     """
-    # 重投影误差检验
+    # Reprojection error test
     reproj_mask = (e_ij <= tau_reproj) & (e_ji <= tau_reproj)
 
-    # 深度一致性检验（相对差异）
+    # Depth consistency test (relative difference)
     depth_mask = filter_outliers_dy_depth(z_i, z_j, switch_dynamic_filter, tau_depth, base_thresh, range_sensitivity)
 
-    # 联合条件
+    # Joint condition
     inlier_mask = reproj_mask & depth_mask
     return inlier_mask
 
 
 def filter_outliers_dy_depth(z_i, z_j, switch_dynamic_filter=True, tau_depth=0.1, base_thresh=0.2, range_sensitivity=0.2):
     """
-    改进版深度一致性过滤器
-    输入:
-        z_i, z_j: 深度值 (n,)
-        dynamic_thresh: 是否启用动态阈值
-        kwargs: 可传递base_thresh/range_sensitivity等参数
-    输出:
-        mask: 内点掩码 (True=内点)
+    Improved depth consistency filter
+    Input:
+        z_i, z_j: Depth values (n,)
+        dynamic_thresh: Whether to enable dynamic threshold
+        kwargs: Can pass parameters like base_thresh/range_sensitivity
+    Output:
+        mask: Inlier mask (True=inlier)
     """
     if switch_dynamic_filter:
         tau_depth = compute_dynamic_tau_depth(z_i, z_j, base_thresh, range_sensitivity)
@@ -78,48 +78,48 @@ def blender_filter(train_cam_infos, match_data, sparse_args):
     for i in range(len(train_cam_infos) - 1):
         cam0 = train_cam_infos[i]
         name0 = cam0.image_name
-        bm0 = cam0.blendermask  # 获取cam0的掩码
-        image0 = cam0.image  # 获取cam0的掩码
-        height0, width0 = bm0.shape  # 掩码的尺寸
+        bm0 = cam0.blendermask  # Get cam0's mask
+        image0 = cam0.image  # Get cam0's image
+        height0, width0 = bm0.shape  # Mask dimensions
 
         for j in range(i + 1, len(train_cam_infos)):
             cam1 = train_cam_infos[j]
             name1 = cam1.image_name
-            bm1 = cam1.blendermask  # 获取cam1的掩码
-            image1 = cam1.image  # 获取cam0的掩码
-            height1, width1 = bm1.shape  # 掩码的尺寸
+            bm1 = cam1.blendermask  # Get cam1's mask
+            image1 = cam1.image  # Get cam1's image
+            height1, width1 = bm1.shape  # Mask dimensions
 
-            # 获取原始匹配数据
+            # Get original matching data
             matches_0_to_1 = match_data[name0][name1]['points']  # (n, 2)
             matches_1_to_0 = match_data[name1][name0]['points']  # (n, 2)
 
-            # 将归一化坐标转换为像素坐标
+            # Convert normalized coordinates to pixel coordinates
             uv0_x = (matches_0_to_1[:, 0] * width0).astype(int)
             uv0_y = (matches_0_to_1[:, 1] * height0).astype(int)
             uv1_x = (matches_1_to_0[:, 0] * width1).astype(int)
             uv1_y = (matches_1_to_0[:, 1] * height1).astype(int)
 
-            # 确保坐标在图像范围内
+            # Ensure coordinates are within image range
             uv0_x = np.clip(uv0_x, 0, width0 - 1)
             uv0_y = np.clip(uv0_y, 0, height0 - 1)
             uv1_x = np.clip(uv1_x, 0, width1 - 1)
             uv1_y = np.clip(uv1_y, 0, height1 - 1)
 
-            # 根据掩码过滤匹配点
-            # 对于cam0：检查匹配点在cam0的掩码中是否为True
+            # Filter matching points based on mask
+            # For cam0: check if matching points in cam0's mask are True
             valid_mask0 = bm0[uv0_y, uv0_x]
 
-            # 对于cam1：检查匹配点在cam1的掩码中是否为True
+            # For cam1: check if matching points in cam1's mask are True
             valid_mask1 = bm1[uv1_y, uv1_x]
 
-            # 求交集：两个掩码都为True的点
+            # Intersection: points where both masks are True
             valid_mask = valid_mask0 & valid_mask1
 
-            # 获取有效的匹配点索引
+            # Get valid matching point indices
             valid_indices = np.where(valid_mask)[0]
 
             if len(valid_indices) > 0:
-                # 更新match_data，只保留有效的匹配点
+                # Update match_data, keep only valid matching points
                 match_data[name0][name1]['points'] = matches_0_to_1[valid_indices]
                 match_data[name1][name0]['points'] = matches_1_to_0[valid_indices]
 
@@ -130,7 +130,7 @@ def blender_filter(train_cam_infos, match_data, sparse_args):
                 #                               name0, name1, match_data[name0][name1]['points'], match_data[name1][name0]['points'],
                 #                'maskFilter')
             else:
-                # 如果没有有效匹配点，可以删除该匹配对或设置为空数组
+                # If no valid matching points, can delete this match pair or set to empty array
                 match_data[name0][name1]['points'] = np.empty((0, 2), dtype=np.float32)
                 match_data[name1][name0]['points'] = np.empty((0, 2), dtype=np.float32)
                 print(f"No valid matches after filtering for {name0}-{name1}")
@@ -232,7 +232,7 @@ def generate_matched_points(pix0, pix1, R, T, K, W, H):
     """Generate 3D points from matched pixels in two views."""
     # Convert numpy arrays to PyTorch tensors if needed
     if isinstance(pix0, np.ndarray):
-        pix0 = torch.from_numpy(pix0).float()  # 确保是float类型，避免整数运算问题
+        pix0 = torch.from_numpy(pix0).float()  # Ensure float type, avoid integer computation issues
     if isinstance(pix1, np.ndarray):
         pix1 = torch.from_numpy(pix1).float()
 
@@ -356,7 +356,7 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
             page01 = cam_dict[key0]['match_infos'][key1]
             page10 = cam_dict[key1]['match_infos'][key0]
 
-            # 获取初始匹配点数量
+            # Get initial match count
             num_matches = len(page01["rays_o"])
             if num_matches == 0:
                 continue
@@ -373,7 +373,7 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
 
             keys2 = [current_key for current_key in all_keys if current_key != key0 and current_key != key1]
 
-            # 初始化middle_mask为全True（所有点都有效）
+            # Initialize middle_mask as all True (all points valid)
             middle_mask = torch.ones(num_matches, dtype=torch.bool, device='cuda')
 
             for key2 in keys2:
@@ -384,33 +384,33 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
                 blender_mask2 = torch.tensor(cam_dict[key2]["blender_mask"]).bool().cuda()
 
                 cam_pts_0to2 = torch.matmul(w2c2, torch.cat([world_pts0, torch.ones_like(world_pts0[:1])]))[:3]
-                depth0 = cam_pts_0to2[2, :]  # 获取深度
+                depth0 = cam_pts_0to2[2, :]  # Get depth
                 xyz_0to2 = torch.matmul(intr2, cam_pts_0to2)
-                valid_z0 = xyz_0to2[2:] > 1e-8  # 深度有效性检查
+                valid_z0 = xyz_0to2[2:] > 1e-8  # Depth validity check
                 xy_0to2 = xyz_0to2[:2] / (xyz_0to2[2:] + 1e-8)
 
                 cam_pts_1to2 = torch.matmul(w2c2, torch.cat([world_pts1, torch.ones_like(world_pts1[:1])]))[:3]
-                depth1 = cam_pts_1to2[2, :]  # 获取深度
+                depth1 = cam_pts_1to2[2, :]  # Get depth
                 xyz_1to2 = torch.matmul(intr2, cam_pts_1to2)
-                valid_z1 = xyz_1to2[2:] > 1e-8  # 深度有效性检查
+                valid_z1 = xyz_1to2[2:] > 1e-8  # Depth validity check
                 xy_1to2 = xyz_1to2[:2] / (xyz_1to2[2:] + 1e-8)
 
-                # 重新排列维度并提取坐标
-                uv0_x = xy_0to2[0, :]  # x坐标
-                uv0_y = xy_0to2[1, :]  # y坐标
-                uv1_x = xy_1to2[0, :]  # x坐标
-                uv1_y = xy_1to2[1, :]  # y坐标
+                # Rearrange dimensions and extract coordinates
+                uv0_x = xy_0to2[0, :]  # x coordinate
+                uv0_y = xy_0to2[1, :]  # y coordinate
+                uv1_x = xy_1to2[0, :]  # x coordinate
+                uv1_y = xy_1to2[1, :]  # y coordinate
 
                 width2 = cam_dict[key2]['width']
                 height2 = cam_dict[key2]['height']
 
-                # 转换为整数索引 (torch版本)
+                # Convert to integer indices (torch version)
                 uv0_x_int = torch.clamp(uv0_x, 0, width2 - 1).long()
                 uv0_y_int = torch.clamp(uv0_y, 0, height2 - 1).long()
                 uv1_x_int = torch.clamp(uv1_x, 0, width2 - 1).long()
                 uv1_y_int = torch.clamp(uv1_y, 0, height2 - 1).long()
 
-                # 确保索引在有效范围内
+                # Ensure indices are within valid range
                 # valid_mask0 = bm0[uv0_y, uv0_x]
                 valid_depth = (depth0 > 0) & (depth1 > 0)
                 valid_coords0 = (uv0_x_int >= 0) & (uv0_x_int < width2) & (uv0_y_int >= 0) & (uv0_y_int < height2)
@@ -418,14 +418,14 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
                 valid_coords = valid_coords0 & valid_coords1 & valid_depth & valid_z0.squeeze(0) & valid_z1.squeeze(0)
 
                 if not torch.any(valid_coords):
-                    # 如果没有有效坐标，所有点都无效
+                    # If no valid coordinates, all points invalid
                     middle_mask[:] = False
                     continue
 
-                # 创建当前key2的有效掩码
+                # Create valid mask for current key2
                 current_valid_mask = torch.zeros(num_matches, dtype=torch.bool, device='cuda')
 
-                # 只对有效坐标进行索引
+                # Index only valid coordinates
                 valid_coords_indices = torch.where(valid_coords)[0]
                 uv0_y_valid = uv0_y_int[valid_coords_indices]
                 uv0_x_valid = uv0_x_int[valid_coords_indices]
@@ -437,7 +437,7 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
 
                 current_valid_mask[valid_coords_indices] = mask0_valid & mask1_valid
 
-                # 累积到middle_mask中（只有所有key2都有效的点才保留）
+                # Accumulate to middle_mask (keep only points valid for all key2)
                 middle_mask = middle_mask & current_valid_mask
 
 
@@ -448,12 +448,12 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
                 # # pixel_2d = (uv0_x_valid, uv0_y_valid) / torch.tensor([width2, height2])
                 # plot_utils.draw_2d_points(f'{sparse_args.matched_image_dir}/{key2}+{key0}+{key1}.jpg', image_data, uv0_coords_norm)
 
-            # 获取最终的有效索引
+            # Get final valid indices
             valid_indices = torch.where(middle_mask)[0]
 
             if len(valid_indices) > 0:
                 print(f'filter outside: {key0}-{key1}-{len(valid_indices)}')
-                # 更新match_data，只保留有效的匹配点
+                # Update match_data, keep only valid matching points
                 cam_dict[key0]['match_infos'][key1] = {
                     "z_val": page01["z_val"][valid_indices],
                     "rays_o": page01["rays_o"][valid_indices],
@@ -481,12 +481,12 @@ def filter_outside(gaussian, cam_infos, min_loss_state, sparse_args):
                 min_loss_state[key0][key1] = min_loss_state[key0][key1][valid_indices]
                 min_loss_state[key1][key0] = min_loss_state[key1][key0][valid_indices]
 
-                # 将mask移到CPU用于存储（如果需要）
+                # Move mask to CPU for storage (if needed)
                 outside_mask_dict[key0][key1] = middle_mask
                 outside_mask_dict[key1][key0] = middle_mask
             else:
-                print(f'{key0}-{key1}无有效点')
-                # 如果没有有效点，清空数据
+                print(f'{key0}-{key1} no valid points')
+                # If no valid points, clear data
                 del cam_dict[key0]['match_infos'][key1]
                 del cam_dict[key1]['match_infos'][key0]
 
@@ -573,7 +573,7 @@ def filter_outliers(gaussian, sparse_args, min_loss_state):
                 pr_mask102 = prop_mask102 * reproj_error_mask01
                 pr_mask120 = prop_mask120 * reproj_error_mask21
 
-                # id_pr_mask102 不一定== id_pr_mask120
+                # id_pr_mask102 not necessarily == id_pr_mask120
                 id_pr_mask102 = torch.nonzero(pr_mask102).flatten()
                 id_pr_mask120 = torch.nonzero(pr_mask120).flatten()
 
@@ -692,7 +692,7 @@ def second_filter(gaussian, sparse_args):
             continue
         key1_data = common_matched_data[key1]
 
-        # 遍历所有 (key0, key2) 组合（key0 != key2 != key1）
+        # Iterate through all (key0, key2) combinations (key0 != key2 != key1)
         for key0, key2 in combinations((k for k in keys if k != key1), 2):
             if key0 not in key1_data or key2 not in key1_data.get(key0, {}):
                 continue
@@ -705,7 +705,7 @@ def second_filter(gaussian, sparse_args):
                 del key1_data[key0][key2]
                 del key1_data[key2][key0]
 
-        if not key1_data:  # 检查是否为空
+        if not key1_data:  # Check if empty
             del common_matched_data[key1]
 
     print('count_leaf: ', count_leaf_values(common_matched_data))

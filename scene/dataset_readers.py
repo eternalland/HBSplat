@@ -694,27 +694,27 @@ def get_match_mono_data(train_cam_infos, sparse_args, dic=None):
 
 def compute_camera_neighbors(input_cams, pos_weight=0.5, rot_weight=0.5, top_k=5):
     """
-    综合位置和旋转信息的相机相邻性计算
+    Camera neighborhood calculation combining position and rotation information
     """
     positions = np.stack([cam.T for cam in input_cams])  # (N, 3)
     rotations = np.stack([cam.R.T for cam in input_cams])  # (N, 3, 3)
 
-    # 1. 位置距离评分
+    # 1. Position distance score
     pos_dist = np.sqrt(np.sum((positions[:, np.newaxis] - positions) ** 2, axis=2))
     pos_scores = np.exp(-pos_dist / np.mean(pos_dist))
 
-    # 2. 旋转相似性评分
-    # 计算旋转矩阵的点积: R_i @ R_j^T
+    # 2. Rotation similarity score
+    # Compute rotation matrix dot product: R_i @ R_j^T
     rot_similarity = np.einsum('nik,mjk->nmij', rotations, rotations)  # (N, N, 3, 3)
     traces = np.diagonal(rot_similarity, axis1=2, axis2=3).sum(axis=2)  # (N, N)
     angle_diff = np.arccos(np.clip((traces - 1) / 2, -1, 1))
     rot_scores = np.exp(-angle_diff / np.mean(angle_diff))
 
-    # 3. 综合评分
+    # 3. Combined score
     combined_scores = pos_weight * pos_scores + rot_weight * rot_scores
 
-    # 4. 获取相邻相机（排除自身）
-    np.fill_diagonal(combined_scores, -np.inf)  # 将自身设为负无穷，避免选择自己
+    # 4. Get neighboring cameras (exclude self)
+    np.fill_diagonal(combined_scores, -np.inf)  # Set self to negative infinity to avoid selecting itself
     neighbor_indices = np.argsort(-combined_scores, axis=1)[:, :top_k]
     neighbor_scores = np.take_along_axis(combined_scores, neighbor_indices, axis=1)
 

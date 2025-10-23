@@ -31,7 +31,7 @@ def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end, viewp
 
         if 0b100 & sparse_args.run_module:
             if iteration == sparse_args.start_propagate_iteration:
-                print("\n开启get_propagate_loss2：", sparse_args.start_propagate_iteration, sparse_args.propagate_weight)
+                print("\nEnable get_propagate_loss2:", sparse_args.start_propagate_iteration, sparse_args.propagate_weight)
             if iteration >= sparse_args.start_propagate_iteration:
                 propagate_loss, loss_state = gaussians.get_propagate_loss3(loss_state)
                 loss += sparse_args.propagate_weight * propagate_loss
@@ -79,7 +79,7 @@ def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end, viewp
 
         if 0b100 & sparse_args.run_module:
 
-            if iteration == sparse_args.filter_iteration - 1:  # 因为迭代从0开始
+            if iteration == sparse_args.filter_iteration - 1:  # Because iteration starts from 0
 
                 if 'blender' in sparse_args.dataset:
                     filter_outlier.filter_propagate_data_common(gaussians, min_loss_state, sparse_args)
@@ -95,12 +95,12 @@ def initial_depth_estimation(gaussians, sparse_args, iter_start, iter_end, viewp
 
                     gaussians.training_setup_init()
 
-                    # 重置状态（可选）
+                    # Reset state (optional)
                     ema_loss_for_log = 0.0
                     best_state_dict = None
                     min_loss_state = None
 
-                    # 创建新的进度条
+                    # Create new progress bar
                     progress_bar = tqdm(range(sparse_args.filter_iteration, sparse_args.num_iterations),
                                         desc="Post-filter training",
                                         initial=sparse_args.filter_iteration)

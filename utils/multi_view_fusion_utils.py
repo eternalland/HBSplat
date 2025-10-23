@@ -62,27 +62,27 @@ def visualization(depth, save_path):
 
 def erode_mask(mask, erode_pixels):
     """
-    向内腐蚀mask
+    Erode mask inward
 
-    参数:
-        mask (torch.Tensor): 输入掩码，形状(1, h, w)
-        erode_pixels (int): 腐蚀的像素数
+    Args:
+        mask (torch.Tensor): Input mask, shape (1, h, w)
+        erode_pixels (int): Number of pixels to erode
 
-    返回:
-        torch.Tensor: 腐蚀后的掩码
+    Returns:
+        torch.Tensor: Eroded mask
     """
     if erode_pixels <= 0:
         return mask
 
-    # 确保mask是二值化的
+    # Ensure mask is binarized
     binary_mask = (mask > 0.5).float()
 
-    # 创建腐蚀核
+    # Create erosion kernel
     kernel_size = 2 * erode_pixels + 1
     kernel = torch.ones(1, 1, kernel_size, kernel_size, device=mask.device)
 
-    # 计算需要多少卷积才能完全腐蚀
-    # 使用最大值卷积，然后检查是否等于核面积（表示所有像素都是1）
+    # Calculate how many convolutions needed for complete erosion
+    # Use max pooling, then check if equal to kernel area (indicating all pixels are 1)
     convolved = F.conv2d(binary_mask.unsqueeze(0), kernel, padding=erode_pixels)
     eroded = (convolved == (kernel_size * kernel_size)).float()
 
@@ -90,75 +90,75 @@ def erode_mask(mask, erode_pixels):
 
 def expand_visible_region_fusion(warped_images, warped_depths, valid_masks, k, erode_pixels=1):
     """
-    扩展可视区域的融合函数
+    Fusion function for expanding visible regions
 
-    参数:
-        warped_images (torch.Tensor): RGB图像，形状(b, 3, h, w)，归一化值[0,1]
-        warped_depths (torch.Tensor): 深度图，形状(b, 1, h, w)
-        valid_masks (torch.Tensor): 有效掩码，形状(b, 1, h, w)，1表示有效，0表示无效
-        k (int): 每组图像数量
+    Args:
+        warped_images (torch.Tensor): RGB images, shape (b, 3, h, w), normalized values [0,1]
+        warped_depths (torch.Tensor): Depth maps, shape (b, 1, h, w)
+        valid_masks (torch.Tensor): Valid masks, shape (b, 1, h, w), 1=valid, 0=invalid
+        k (int): Number of images per group
 
-    返回:
+    Returns:
         tuple: (fused_images, fused_depths, fused_masks)
     """
     b, c, h, w = warped_images.shape
     n = b // k
 
-    # 初始化输出
+    # Initialize output
     fused_images = torch.zeros((n, 3, h, w), device=warped_images.device)
     fused_depths = torch.zeros((n, 1, h, w), device=warped_images.device)
     fused_masks = torch.zeros((n, 1, h, w), device=warped_images.device, dtype=torch.float32)
 
     for i in range(n):
-        # 获取当前组
+        # Get current group
         group_start = i * k
         group_end = (i + 1) * k
         group_images = warped_images[group_start:group_end]
         group_depths = warped_depths[group_start:group_end]
         group_masks = valid_masks[group_start:group_end]
 
-        # 以第一张图像为基础
+        # Use first image as base
         base_image = group_images[0].clone()
         base_depth = group_depths[0].clone()
         base_mask = group_masks[0].clone()
 
-        # 向内腐蚀base_mask
+        # Erode base_mask inward
         if erode_pixels > 0:
             base_mask = erode_mask(base_mask, erode_pixels)
 
-        # 找到基础图像中需要填充的区域（mask为0的区域）
-        holes_mask = (base_mask < 0.5).float()  # 需要填充的区域为1
+        # Find regions in base image that need filling (regions where mask=0)
+        holes_mask = (base_mask < 0.5).float()  # Regions to fill are 1
 
         if holes_mask.sum() == 0:
-            # 如果没有需要填充的区域，直接使用基础图像
+            # If no regions to fill, directly use base image
             fused_images[i] = base_image
             fused_depths[i] = base_depth
             fused_masks[i] = base_mask
             continue
 
-        # 对每个其他图像进行处理
+        # Process each other image
         for j in range(1, k):
             current_image = group_images[j]
             current_depth = group_depths[j]
             current_mask = group_masks[j]
 
-            # 只考虑当前图像有效且基础图像无效的区域
+            # Only consider regions that are valid in current image and invalid in base image
             fill_candidate = (current_mask > 0.5) & (holes_mask > 0.5)
 
             if fill_candidate.sum() > 0:
-                # 使用当前图像填充空洞
+                # Use current image to fill holes
                 base_image = torch.where(fill_candidate.repeat(1, 3, 1, 1),
                                          current_image, base_image)
                 base_depth = torch.where(fill_candidate, current_depth, base_depth)
                 base_mask = torch.where(fill_candidate, current_mask, base_mask)
 
-                # 更新空洞掩码（减去已填充的区域）
+                # Update holes mask (subtract filled regions)
                 holes_mask = (base_mask < 0.5).float()
 
                 if holes_mask.sum() == 0:
-                    break  # 所有空洞都已填充
+                    break  # All holes filled
 
-        # 应用边缘平滑
+        # Apply edge smoothing
         base_image = smooth_transitions(base_image, base_mask)
 
         fused_images[i] = base_image
@@ -170,18 +170,18 @@ def expand_visible_region_fusion(warped_images, warped_depths, valid_masks, k, e
 
 def smooth_transitions(image, mask, kernel_size=5):
     """
-    对融合边界进行平滑处理
+    Smooth fusion boundaries
     """
-    # 创建边界掩码（从无效到有效的过渡区域）
+    # Create boundary mask (transition region from invalid to valid)
     boundary_mask = create_boundary_mask(mask, kernel_size)
 
     if boundary_mask.sum() == 0:
         return image
 
-    # 对边界区域进行高斯模糊
+    # Apply Gaussian blur to boundary regions
     blurred_image = transforms.functional.gaussian_blur(image, kernel_size=kernel_size, sigma=0.1)
 
-    # 混合原始图像和模糊图像
+    # Blend original and blurred images
     alpha = boundary_mask.repeat(1, 3, 1, 1)
     smoothed_image = image * (1 - alpha) + blurred_image * alpha
 
@@ -190,18 +190,18 @@ def smooth_transitions(image, mask, kernel_size=5):
 
 def create_boundary_mask(mask, kernel_size=5):
     """
-    创建边界区域的掩码
+    Create mask for boundary regions
     """
-    # 膨胀有效区域
+    # Dilate valid regions
     kernel = torch.ones(1, 1, kernel_size, kernel_size, device=mask.device)
     dilated_mask = F.conv2d(mask, kernel, padding=kernel_size // 2)
     dilated_mask = (dilated_mask > 0).float()
 
-    # 腐蚀有效区域
+    # Erode valid regions
     eroded_mask = F.conv2d(mask, kernel, padding=kernel_size // 2)
     eroded_mask = (eroded_mask == kernel_size * kernel_size).float()
 
-    # 边界区域 = 膨胀区域 - 腐蚀区域
+    # Boundary region = dilated region - eroded region
     boundary_mask = dilated_mask - eroded_mask
 
     return boundary_mask
@@ -209,7 +209,7 @@ def create_boundary_mask(mask, kernel_size=5):
 
 def advanced_expand_visible_region_fusion(warped_images, warped_depths, valid_masks, k):
     """
-    高级版本：考虑深度一致性的融合
+    Advanced version: fusion considering depth consistency
     """
     b, c, h, w = warped_images.shape
     n = b // k
@@ -236,25 +236,25 @@ def advanced_expand_visible_region_fusion(warped_images, warped_depths, valid_ma
             fused_masks[i] = base_mask
             continue
 
-        # 按深度排序（从近到远），优先使用近距离信息填充
+        # Sort by depth (near to far), prioritize using nearby information for filling
         depth_values = []
         for j in range(k):
             if group_masks[j].sum() > 0:
                 median_depth = torch.median(group_depths[j][group_masks[j] > 0.5])
                 depth_values.append((j, median_depth.item()))
 
-        # 按深度排序（近的优先）
+        # Sort by depth (near first)
         depth_values.sort(key=lambda x: x[1])
-        sorted_indices = [idx for idx, _ in depth_values if idx != 0]  # 排除基础图像
+        sorted_indices = [idx for idx, _ in depth_values if idx != 0]  # Exclude base image
 
         for j in sorted_indices:
             current_image = group_images[j]
             current_depth = group_depths[j]
             current_mask = group_masks[j]
 
-            # 深度一致性检查：只填充深度相近的区域
+            # Depth consistency check: only fill regions with similar depth
             depth_diff = torch.abs(base_depth - current_depth)
-            depth_consistent = (depth_diff < 0.1) | (base_mask < 0.5)  # 基础无效或深度相近
+            depth_consistent = (depth_diff < 0.1) | (base_mask < 0.5)  # Base invalid or depth similar
 
             fill_candidate = (current_mask > 0.5) & (holes_mask > 0.5) & depth_consistent
 
@@ -267,7 +267,7 @@ def advanced_expand_visible_region_fusion(warped_images, warped_depths, valid_ma
                 if holes_mask.sum() == 0:
                     break
 
-        # 最终平滑处理
+        # Final smoothing
         base_image = smooth_transitions(base_image, base_mask)
 
         fused_images[i] = base_image
@@ -279,7 +279,7 @@ def advanced_expand_visible_region_fusion(warped_images, warped_depths, valid_ma
 
 
 
-# 使用示例
+# Usage example
 def multi_view_fusion(sparse_args, warped_images, warped_depths, valid_masks, k):
 
     fused_images, fused_depths, fused_masks = expand_visible_region_fusion(

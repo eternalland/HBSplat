@@ -12,10 +12,10 @@ from utils import image_utils
 from data_preprocess.read_models import *
 
 import matplotlib
-matplotlib.use('agg')  # 设置非交互式后端，禁用图片显示
+matplotlib.use('agg')  # Set non-interactive backend, disable image display
 import matplotlib.pyplot as plt
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置中文字体
-plt.rcParams['axes.unicode_minus'] = False    # 解决负号显示问题
+plt.rcParams['font.sans-serif'] = ['SimHei']  # Set Chinese font
+plt.rcParams['axes.unicode_minus'] = False    # Solve minus sign display issue
 
 
 
@@ -26,26 +26,26 @@ def draw_matching2(save_dir, img_data0, img_data1, img_name0, img_name1, points0
     h0, w0 = img0.shape[:2]
     h1, w1 = img1.shape[:2]
 
-    # 将归一化坐标转换为像素坐标
+    # Convert normalized coordinates to pixel coordinates
     pixel_points0 = (points0 * np.array([w0, h0])).astype(int)
     pixel_points1 = (points1 * np.array([w1, h1])).astype(int)
 
-    # 为每对点生成随机 RGB 颜色
+    # Generate random RGB color for each pair of points
     num_points0 = len(points0)
     num_points1 = len(points1)
-    colors = np.random.rand(num_points0, 3)  # 生成形状 (N, 3) 的随机 RGB 颜色，范围 [0, 1]
+    colors = np.random.rand(num_points0, 3)  # Generate random RGB colors with shape (N, 3), range [0, 1]
 
-    # 创建可视化图形
+    # Create visualization figure
     plt.figure(figsize=(15, 8))
 
-    # 子图 1：参考点
+    # Subplot 1: reference points
     plt.subplot(1, 2, 1)
     plt.imshow(img0)
     plt.scatter(pixel_points0[:, 0], pixel_points0[:, 1], c=colors, s=1)
     plt.title(f'{img_name0}')
     plt.xlabel(f'matching_point_number: {num_points0}')
 
-    # 子图 2：对齐点9
+    # Subplot 2: aligned points
     plt.subplot(1, 2, 2)
     plt.imshow(img1)
     plt.scatter(pixel_points1[:, 0], pixel_points1[:, 1], c=colors, s=1)
@@ -57,8 +57,8 @@ def draw_matching2(save_dir, img_data0, img_data1, img_name0, img_name1, points0
     plt.close()
 
 def draw_matching(args, img_path0, img_path1, points0, points1, matching_number):
-    print("points1 的类型:", type(points1))
-    print("points1 的内容:", points1)
+    print("points1 type:", type(points1))
+    print("points1 content:", points1)
     img_name0 = os.path.basename(img_path0).split(".")[0]
     img_name1 = os.path.basename(img_path1).split(".")[0]
     # Load image
@@ -68,31 +68,31 @@ def draw_matching(args, img_path0, img_path1, points0, points1, matching_number)
     h0, w0 = img0.shape[:2]
     h1, w1 = img1.shape[:2]
 
-    # 将归一化坐标转换为像素坐标
+    # Convert normalized coordinates to pixel coordinates
     pixel_points0 = (points0 * np.array([w0, h0])).astype(int)
     pixel_points1 = (points1 * np.array([w1, h1])).astype(int)
 
-    # 为每对点生成随机 RGB 颜色
+    # Generate random RGB color for each pair of points
     num_points0 = len(points0)
     num_points1 = len(points1)
-    colors = np.random.rand(num_points0, 3)  # 生成形状 (N, 3) 的随机 RGB 颜色，范围 [0, 1]
+    colors = np.random.rand(num_points0, 3)  # Generate random RGB colors with shape (N, 3), range [0, 1]
 
-    # 创建可视化图形
+    # Create visualization figure
     plt.figure(figsize=(15, 8))
 
-    # 子图 1：参考点
+    # Subplot 1: reference points
     plt.subplot(1, 2, 1)
     plt.imshow(img0)
     plt.scatter(pixel_points0[:, 0], pixel_points0[:, 1], c=colors, s=1)
     plt.title(f'{img_name0} ({args.matching_method})')
-    plt.xlabel(f'ransac之前点数: {matching_number}，对齐点数: {num_points0}')
+    plt.xlabel(f'Before ransac points: {matching_number}, aligned points: {num_points0}')
 
-    # 子图 2：对齐点
+    # Subplot 2: aligned points
     plt.subplot(1, 2, 2)
     plt.imshow(img1)
     plt.scatter(pixel_points1[:, 0], pixel_points1[:, 1], c=colors, s=1)
     plt.title(f'{img_name1} ({args.matching_method})')
-    plt.xlabel(f'ransac之前点数: {matching_number}，对齐点数: {num_points1}')
+    plt.xlabel(f'Before ransac points: {matching_number}, aligned points: {num_points1}')
 
     plt.savefig(f'{args.matched_image_dir}/{img_name0}_{img_name1}_{args.sign}_{len(points0)}.png', dpi=600, bbox_inches='tight')
 
