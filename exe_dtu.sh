@@ -3,8 +3,8 @@ GPU_ids=0
 dataset=dtu
 scenes=(scan8 scan21 scan30 scan31 scan34 scan38 scan40 scan41 scan45 scan55 scan63 scan82 scan103 scan110 scan114)
 
-data_path=./data/dtu
-output_path=./output/dtu_110
+data_path=/home/mayu/thesis/datasets/dtu
+output_path=/home/mayu/thesis/HBSplat/output/dtu
 res=2
 run_module=6
 
@@ -33,7 +33,7 @@ do
     --eval \
     --run_module $run_module \
     --input_views $input_views  --neighbor_dis 3 --inv_scale $inv_scale \
-    --tau_reproj 0.05 --base_thresh 0.05 --range_sensitivity 0.1 \
+    --tau_reproj 0.1 --base_thresh 0.1 --range_sensitivity 0.1 \
     --switch_generate_matching_mono $switch_generate_matching_mono \
 
     if [ $switch_generate_matching_mono -eq 1 ]; then
