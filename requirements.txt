@@ -11,7 +11,8 @@ timm
 pillow_heif
 omegaconf
 einops 
-loguru yacs  
+loguru 
+yacs  
 pytorch_lightning==2.0
 xFormers==0.0.19
 simple_lama_inpainting
